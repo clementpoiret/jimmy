@@ -9,13 +9,13 @@ class PatchEmbed(nnx.Module):
 
     def __init__(
         self,
-        rngs: nnx.Rngs,
         patch_size: int = 16,
         in_channels: int = 3,
         embed_dim: int = 768,
         norm_layer: Optional[nnx.Module] = None,
         flatten: bool = True,
         use_bias: bool = True,
+        rngs: nnx.Rngs = None,
     ):
         self.flatten = flatten
         self.embed_dim = embed_dim

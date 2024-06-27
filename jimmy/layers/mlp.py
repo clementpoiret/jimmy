@@ -6,13 +6,13 @@ class Mlp(nnx.Module):
 
     def __init__(
         self,
-        rngs: nnx.Rngs,
         in_features: int,
         hidden_features: int,
         out_features: int,
         act_layer: nnx.Module = nnx.gelu,
         dropout_rate: float = 0.0,
         bias: bool = True,
+        rngs: nnx.Rngs = None,
     ):
         self.fc1 = nnx.Linear(in_features, hidden_features, rngs=rngs)
         self.act = act_layer

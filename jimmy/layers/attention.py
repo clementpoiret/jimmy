@@ -6,7 +6,6 @@ class Attention(nnx.Module):
 
     def __init__(
         self,
-        rngs: nnx.Rngs,
         dim: int,
         num_heads: int = 8,
         qkv_bias: bool = False,
@@ -14,6 +13,7 @@ class Attention(nnx.Module):
         attn_drop: float = 0.,
         proj_drop: float = 0.,
         norm_layer: nnx.Module = nnx.LayerNorm,
+        rngs: nnx.Rngs = None,
     ):
         self.dim = dim
         self.num_heads = num_heads
