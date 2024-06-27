@@ -7,8 +7,6 @@ from jimmy.layers.blocks import Block
 from jimmy.layers.mlp import Mlp
 from jimmy.layers.patch_embed import PatchEmbed
 
-nnx.Linear(3, 32, rngs=nnx.Rngs(0), name="test")
-
 
 class DinoV2(nnx.Module):
 
