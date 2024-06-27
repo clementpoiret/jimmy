@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "jimmy"
+version = "0.1.0"
+license = "MIT"
+description = ""
+authors = ["clementpoiret <poiret.clement@outlook.fr>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+jax = "^0.4.30"
+jaxlib = "^0.4.30"
+flax = "^0.8.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
