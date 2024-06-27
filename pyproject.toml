@@ -1,3 +1,7 @@
+[project]
+name = "jimmy"
+requires-python = ">=3.9"
+
 [tool.poetry]
 name = "jimmy"
 version = "0.1.0"
@@ -7,7 +11,7 @@ authors = ["clementpoiret <poiret.clement@outlook.fr>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.9"
 jax = "^0.4.30"
 jaxlib = "^0.4.30"
 flax = "^0.8.5"
@@ -15,3 +19,12 @@ flax = "^0.8.5"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.pypi-dependencies]
+jimmy = { path = ".", editable = true }
+
+[tool.pixi.tasks]
