@@ -10,13 +10,16 @@ class Mlp(nnx.Module):
     def __init__(
         self,
         in_features: int,
-        hidden_features: int,
-        out_features: int,
+        hidden_features: int | None = None,
+        out_features: int | None = None,
         act_layer: Callable = nnx.gelu,
         dropout_rate: float = 0.0,
         bias: bool = True,
         rngs: nnx.Rngs = None,
     ):
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+
         self.fc1 = nnx.Linear(in_features, hidden_features, rngs=rngs)
         self.act = act_layer
         self.drop1 = nnx.Dropout(dropout_rate, rngs=rngs)

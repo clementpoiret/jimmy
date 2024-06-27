@@ -25,12 +25,8 @@ class Attention(nnx.Module):
         self.proj = nnx.Linear(dim, dim, rngs=rngs)
         self.proj_drop = nn.Dropout(proj_drop, rngs=Rngs)
 
-        if qk_norm:
-            self.q_norm = norm_layer(self.head_dim, rngs=rngs)
-            self.k_norm = norm_layer(self.head_dim, rngs=rngs)
-        else:
-            self.q_norm = None
-            self.k_norm = None
+        self.q_norm = norm_layer(self.head_dim, rngs=rngs) if qk_norm else None
+        self.k_norm = norm_layer(self.head_dim, rngs=rngs) if qk_norm else None
 
     def __call__(self, x: jnp.ndarray):
         B, N, C = x.shape
@@ -43,7 +39,7 @@ class Attention(nnx.Module):
         qkv = jnp.transpose(qkv, (2, 0, 3, 1, 4))
 
         q, k, v = tuple(qkv)
-        if qk_norm:
+        if self.qk_norm:
             q, k = self.q_norm(q), self.k_norm(k)
 
         # TODO: fused attention

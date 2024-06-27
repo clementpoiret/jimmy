@@ -31,10 +31,8 @@ class PatchEmbed(nnx.Module):
             rngs=rngs,
         )
 
-        if norm_layer is not None:
-            self.norm = norm_layer(num_features=embed_dim, rngs=rngs)
-        else:
-            self.norm = None
+        self.norm = norm_layer(num_features=embed_dim,
+                               rngs=rngs) if norm_layer else None
 
     def __call__(self, x: jnp.ndarray):
         _, H, W, C = x.shape

@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 
 import jax
 import jax.numpy as jnp
@@ -106,12 +106,10 @@ class Block(nnx.Module):
             norm_layer=norm_layer,
             rngs=rngs,
         )
-        self.ls1 = None
-        if init_values:
-            self.ls1 = LayerScale(dim, init_values, rngs=rngs)
-        self.drop_path1 = None
-        if drop_path > 0.:
-            self.drop_path1 = DropPath(drop_path, rngs=rngs)
+        self.ls1 = LayerScale(dim, init_values,
+                              rngs=rngs) if init_values else None
+        self.drop_path1 = DropPath(drop_path,
+                                   rngs=rngs) if drop_path > 0. else None
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
         self.mlp = Mlp(
@@ -121,12 +119,10 @@ class Block(nnx.Module):
             dropout_rate=proj_drop,
             rngs=rngs,
         )
-        self.ls2 = None
-        if init_values:
-            self.ls2 = LayerScale(dim, init_values, rngs=rngs)
-        self.drop_path2 = None
-        if drop_path > 0.:
-            self.drop_path2 = DropPath(drop_path, rngs=rngs)
+        self.ls2 = LayerScale(dim, init_values,
+                              rngs=rngs) if init_values else None
+        self.drop_path2 = DropPath(drop_path,
+                                   rngs=rngs) if drop_path > 0. else None
 
     def __call__(self, x: jnp.ndarray):
         x = self.ls1(self.attn(self.norm1(x)))
