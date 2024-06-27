@@ -1,3 +1,6 @@
+from typing import Callable
+
+import jax.numpy as jnp
 from flax import nnx
 
 
@@ -9,7 +12,7 @@ class Mlp(nnx.Module):
         in_features: int,
         hidden_features: int,
         out_features: int,
-        act_layer: nnx.Module = nnx.gelu,
+        act_layer: Callable = nnx.gelu,
         dropout_rate: float = 0.0,
         bias: bool = True,
         rngs: nnx.Rngs = None,
@@ -20,7 +23,7 @@ class Mlp(nnx.Module):
         self.fc2 = nnx.Linear(hidden_features, out_features, rngs=rngs)
         self.drop2 = nnx.Dropout(dropout_rate, rngs=rngs)
 
-    def __call__(self, x):
+    def __call__(self, x: jnp.ndarray):
         x = self.fc1(x)
         x = self.act(x)
         x = self.drop1(x)

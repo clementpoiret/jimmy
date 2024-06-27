@@ -32,7 +32,7 @@ class Attention(nnx.Module):
             self.q_norm = None
             self.k_norm = None
 
-    def __call__(self, x):
+    def __call__(self, x: jnp.ndarray):
         B, N, C = x.shape
         assert (
             C == self.dim

@@ -36,7 +36,7 @@ class PatchEmbed(nnx.Module):
         else:
             self.norm = None
 
-    def __call__(self, x):
+    def __call__(self, x: jnp.ndarray):
         _, H, W, C = x.shape
         assert (
             H % self.patch_H == 0 and W % self.patch_W == 0
