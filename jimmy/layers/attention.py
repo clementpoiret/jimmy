@@ -19,7 +19,6 @@ class Attention(nnx.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.qk_norm = qk_norm
-        self.scale = self.head_dim**-0.5
 
         self.qkv = nnx.Linear(dim, dim * 3, use_bias=qkv_bias, rngs=rngs)
         self.attn_drop = nnx.Dropout(attn_drop, rngs=rngs)
@@ -48,10 +47,7 @@ class Attention(nnx.Module):
             q, k = self.q_norm(q), self.k_norm(k)
 
         # TODO: fused attention
-        # TODO: verify scaling, might be q=q@k/sqrt(dim//num_heads)
-        q = q * self.scale
-
-        attn = q @ k.transpose((0, 1, 3, 2))
+        attn = q @ k.transpose((0, 1, 3, 2)) / jnp.sqrt(self.head_dim)
         attn = nnx.softmax(attn, axis=-1)
         attn = self.attn_drop(attn)
 
