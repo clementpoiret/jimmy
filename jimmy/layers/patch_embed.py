@@ -19,7 +19,7 @@ class PatchEmbed(nnx.Module):
     ):
         self.flatten = flatten
         self.embed_dim = embed_dim
-        self.patch_H, self.patch_W = self.patch_size, self.patch_size
+        self.patch_H, self.patch_W = patch_size, patch_size
 
         self.proj = nnx.Conv(
             in_features=in_channels,
@@ -48,7 +48,7 @@ class PatchEmbed(nnx.Module):
         if self.norm:
             x = self.norm(x)
 
-        if self.flatten:
+        if not self.flatten:
             x = jnp.reshape(x, (-1, H, W, self.embed_dim))
 
         return x

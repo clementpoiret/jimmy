@@ -9,6 +9,12 @@ from jimmy.layers.attention import Attention
 from jimmy.layers.mlp import Mlp
 
 
+class Identity(nnx.Module):
+
+    def __call__(self, x: jnp.ndarray):
+        return x
+
+
 class LayerScale(nnx.Module):
 
     def __init__(
@@ -53,11 +59,11 @@ class DropPath(nnx.Module):
             either a __call__ argument or class attribute""",
         )
 
-        if (self.rate == 0.0) or deterministic:
+        if (self.drop_prob == 0.0) or deterministic:
             return x
 
         # Prevent gradient NaNs in 1.0 edge-case.
-        if self.rate == 1.0:
+        if self.drop_prob == 1.0:
             return jnp.zeros_like(x)
 
         rngs = first_from(
@@ -70,11 +76,12 @@ class DropPath(nnx.Module):
         rng = rngs[self.rng_collection]()
 
         keep_prob = 1.0 - self.drop_prob
-        shape = (x.shape[0], 1, 1, 1)
+
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
         mask = jax.random.bernoulli(rng, p=keep_prob, shape=shape)
 
-        # return x / keep_prob * random_tensor
-        return jax.lax.select(mask, x / keep_prob, jnp.zeros_like(x))
+        return x / keep_prob * mask
+        # return jax.lax.select(mask, x / keep_prob, jnp.zeros_like(x))
 
 
 class Block(nnx.Module):
@@ -90,13 +97,14 @@ class Block(nnx.Module):
         attn_drop: float = 0.,
         init_values: Optional[float] = None,
         drop_path: float = 0.,
+        attention: nnx.Module = Attention,
         act_layer: Callable = nnx.gelu,
         norm_layer: nnx.Module = nnx.LayerNorm,
         mlp_layer: nnx.Module = Mlp,
         rngs: nnx.Rngs = None,
     ):
         self.norm1 = norm_layer(num_features=dim, rngs=rngs)
-        self.attn = Attention(
+        self.attn = attention(
             dim,
             num_heads=num_heads,
             qkv_bias=qkv_bias,
@@ -107,9 +115,9 @@ class Block(nnx.Module):
             rngs=rngs,
         )
         self.ls1 = LayerScale(dim, init_values,
-                              rngs=rngs) if init_values else None
+                              rngs=rngs) if init_values else Identity()
         self.drop_path1 = DropPath(drop_path,
-                                   rngs=rngs) if drop_path > 0. else None
+                                   rngs=rngs) if drop_path > 0. else Identity()
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
         self.mlp = Mlp(
@@ -120,17 +128,12 @@ class Block(nnx.Module):
             rngs=rngs,
         )
         self.ls2 = LayerScale(dim, init_values,
-                              rngs=rngs) if init_values else None
+                              rngs=rngs) if init_values else Identity()
         self.drop_path2 = DropPath(drop_path,
-                                   rngs=rngs) if drop_path > 0. else None
+                                   rngs=rngs) if drop_path > 0. else Identity()
 
     def __call__(self, x: jnp.ndarray):
-        x = self.ls1(self.attn(self.norm1(x)))
-        if self.drop_path1:
-            x = self.drop_path1(x)
-
-        x = self.ls2(self.mlp(self.norm2(x)))
-        if self.drop_path2:
-            x = self.drop_path2(x)
+        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
+        x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
 
         return x

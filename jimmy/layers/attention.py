@@ -23,7 +23,7 @@ class Attention(nnx.Module):
         self.qkv = nnx.Linear(dim, dim * 3, use_bias=qkv_bias, rngs=rngs)
         self.attn_drop = nnx.Dropout(attn_drop, rngs=rngs)
         self.proj = nnx.Linear(dim, dim, rngs=rngs)
-        self.proj_drop = nn.Dropout(proj_drop, rngs=Rngs)
+        self.proj_drop = nnx.Dropout(proj_drop, rngs=rngs)
 
         self.q_norm = norm_layer(self.head_dim, rngs=rngs) if qk_norm else None
         self.k_norm = norm_layer(self.head_dim, rngs=rngs) if qk_norm else None
