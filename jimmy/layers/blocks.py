@@ -35,10 +35,12 @@ class DropPath(nnx.Module):
 
     def __init__(self,
                  drop_prob: float = 0.,
+                 scale_by_keep: bool = True,
                  deterministic: bool = False,
                  rng_collection: str = "dropout",
                  rngs: nnx.Rngs = None):
         self.drop_prob = drop_prob
+        self.scale_by_keep = scale_by_keep
         self.deterministic = deterministic
         self.rng_collection = rng_collection
         self.rngs = rngs
@@ -78,9 +80,12 @@ class DropPath(nnx.Module):
         keep_prob = 1.0 - self.drop_prob
 
         shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        mask = jax.random.bernoulli(rng, p=keep_prob, shape=shape)
+        random_tensor = jax.random.bernoulli(rng, p=keep_prob, shape=shape)
 
-        return x / keep_prob * mask
+        if keep_prob > 0.0 and scale_by_keep:
+            random_tensor /= keep_prob
+
+        return x * random_tensor
         # return jax.lax.select(mask, x / keep_prob, jnp.zeros_like(x))
 
 
@@ -91,8 +96,10 @@ class Block(nnx.Module):
         dim: int,
         num_heads: int,
         mlp_ratio: float = 4.,
-        qkv_bias: bool = False,
+        qkv_bias: bool = True,
         qk_norm: bool = False,
+        ffn_bias: bool = True,
+        proj_bias: bool = True,
         proj_drop: float = 0.,
         attn_drop: float = 0.,
         init_values: Optional[float] = None,
@@ -100,7 +107,7 @@ class Block(nnx.Module):
         attention: nnx.Module = Attention,
         act_layer: Callable = nnx.gelu,
         norm_layer: nnx.Module = nnx.LayerNorm,
-        mlp_layer: nnx.Module = Mlp,
+        ffn_layer: nnx.Module = Mlp,
         rngs: nnx.Rngs = None,
     ):
         self.norm1 = norm_layer(num_features=dim, rngs=rngs)
@@ -108,6 +115,7 @@ class Block(nnx.Module):
             dim,
             num_heads=num_heads,
             qkv_bias=qkv_bias,
+            proj_bias=proj_bias,
             qk_norm=qk_norm,
             attn_drop=attn_drop,
             proj_drop=proj_drop,
@@ -120,11 +128,12 @@ class Block(nnx.Module):
                                    rngs=rngs) if drop_path > 0. else Identity()
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
-        self.mlp = Mlp(
+        self.mlp = ffn_layer(
             in_features=dim,
             hidden_features=int(dim * mlp_ratio),
             act_layer=act_layer,
             dropout_rate=proj_drop,
+            bias=ffn_bias,
             rngs=rngs,
         )
         self.ls2 = LayerScale(dim, init_values,
