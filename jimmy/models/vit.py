@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -9,10 +9,6 @@ from jimmy.layers.blocks import Block, Identity
 from jimmy.layers.mlp import Mlp
 from jimmy.layers.patch_embed import PatchEmbed
 
-# TODO: handle dynamic image size
-# TODO: dynamic_img_size
-# TODO: dynamic_img_pad
-# TODO: interpolate_pos_encoding
 # TODO: pos_drop
 # TODO: compare to prepare_tokens_with_masks
 
@@ -38,8 +34,8 @@ class DinoV2(nnx.Module):
         reg_tokens: int = 1,
         pos_embed: str = "learn",
         no_embed_class: bool = False,
-        # dynamic_img_size: bool = False,
-        # dynamic_img_pad: bool = False,
+        dynamic_img_size: bool = False,
+        dynamic_img_pad: bool = False,
         embed_layer: nnx.Module = PatchEmbed,
         act_layer: Callable = nnx.gelu,
         block: nnx.Module = Block,
@@ -47,12 +43,11 @@ class DinoV2(nnx.Module):
         ffn_layer: nnx.Module = Mlp,
         init_values: float | None = None,
         interpolate_antialias=False,
-        interpolate_offset=0.1,
         rngs: nnx.Rngs = None,
     ):
         assert pos_embed in ("", "none", "learn")
 
-        # self.embed_dim = embed_dim
+        self.embed_dim = embed_dim
         self.depth = depth
         self.patch_size = patch_size
         self.num_prefix_tokens = 1 if class_token else 0
@@ -61,12 +56,15 @@ class DinoV2(nnx.Module):
         self.has_class_token = class_token
         self.no_embed_class = no_embed_class  # don't embed prefix positions (includes reg)
         self.interpolate_antialias = interpolate_antialias
-        self.interpolate_offset = interpolate_offset
-        # self.dynamic_img_size = dynamic_img_size
+        self.dynamic_img_size = dynamic_img_size
 
-        self.patch_embed = embed_layer(patch_size=patch_size,
+        self.patch_embed = embed_layer(img_size=img_size,
+                                       patch_size=patch_size,
                                        in_channels=in_channels,
                                        embed_dim=embed_dim,
+                                       flatten=not dynamic_img_size,
+                                       dynamic_img_size=dynamic_img_size,
+                                       dynamic_img_pad=dynamic_img_pad,
                                        rngs=rngs)
         self.cls_token = nnx.Param(
             nnx.initializers.zeros(rngs.params(),
@@ -77,8 +75,8 @@ class DinoV2(nnx.Module):
                 [1, reg_tokens, embed_dim],
             )) if reg_tokens else None
 
-        num_patches = (img_size // patch_size)**2
-        self.embed_len = num_patches if no_embed_class else num_patches + self.num_prefix_tokens
+        self.num_patches = (img_size // patch_size)**2
+        self.embed_len = self.num_patches if no_embed_class else self.num_patches + self.num_prefix_tokens
         if not pos_embed or pos_embed == "none":
             self.pos_embed = None
         else:
@@ -120,41 +118,59 @@ class DinoV2(nnx.Module):
         #         [1, embed_dim],
         #     ))
 
-    def interpolate_pos_encoding(self, x: jnp.ndarray, h: int, w: int):
-        previous_dtype = x.dtype
+    def resample_pos_embed(
+        self,
+        pos_embed: jnp.ndarray,
+        new_size: Tuple[int],
+        old_size: Tuple[int] = None,
+        interpolation: str = "bicubic",
+        antialias: bool = True,
+    ):
+        previous_dtype = pos_embed.value.dtype
 
-        # TODO: VERIFY REG TOKENS
-        npatch = x.shape[1] - 1
-        N = self.embed_len - 1
+        num_new_tokens = new_size[0] * new_size[1] + self.num_prefix_tokens
 
-        if npatch == N and h == w:
-            return self.pos_embed
+        if num_new_tokens == self.embed_len and new_size[0] == new_size[1]:
+            return pos_embed
 
-        pos_embed = self.pos_embed.value.astype("float32")
-        class_pos_embed = pos_embed[:, 0]
-        patch_pos_embed = pos_embed[:, 1:]
-        dim = x.shape[-1]
-        h0 = h // self.patch_size
-        w0 = w // self.patch_size
-        M = int(jnp.sqrt(N))  # Recover the number of patches in each dimension
+        if old_size is None:
+            hw = int(math.sqrt(self.num_patches))
+            old_size = hw, hw
 
-        assert N == M * M
+        prefix_embed = pos_embed[:, :self.
+                                 num_prefix_tokens] if self.num_prefix_tokens else None
+        pos_embed = pos_embed[:, self.num_prefix_tokens:]
 
-        patch_pos_embed = jax.image.resize(
-            patch_pos_embed.reshape(1, M, M, dim),
+        pos_embed = pos_embed.astype("float32")
+        pos_embed = jnp.reshape(pos_embed,
+                                (1, old_size[0], old_size[1], self.embed_dim))
+
+        pos_embed = jax.image.resize(
+            pos_embed,
             (1, h0, w0, dim),
-            method="bicubic",
+            method=interpolation,
+            antialias=antialias,
         )
-        assert (h0, w0) == patch_pos_embed.shape[1:3]
+        pos_embed = pos_embed.reshape(1, -1, embed_dim).astype(previous_dtype)
 
-        patch_pos_embed = jnp.reshape(patch_pos_embed, (1, -1, dim))
+        if prefix_embed is not None:
+            pro_embed = jnp.concatenate(prefix_embed + [pos_embed], axis=1)
 
-        return jnp.concatenate((class_pos_embed[None], patch_pos_embed),
-                               axis=1).astype(previous_dtype)
+        return pos_embed
 
     def _pos_embed(self, x: jnp.ndarray, h: int, w: int):
         if self.pos_embed is None:
             return jnp.reshape(x, (x.shape[0], -1, x.shape[-1]))
+
+        if self.dynamic_img_size:
+            B, H, W, C = x.shape
+            pos_embed = self.resample_pos_embed(
+                self.pos_embed,
+                new_size=(H, W),
+                antialias=self.interpolate_antialias)
+            x = jnp.reshape(x, (B, -1, C))
+        else:
+            pos_embed = self.pos_embed
 
         to_cat = []
         if self.cls_token is not None:
@@ -173,13 +189,13 @@ class DinoV2(nnx.Module):
         # WARNING: it seems different compared to
         # https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
         if self.no_embed_class:
-            x = x + self.interpolate_pos_encoding(self.pos_embed, h, w)
+            x = x + pos_embed
             if to_cat:
                 x = jnp.concatenate(to_cat + [x], axis=1)
         else:
             if to_cat:
                 x = jnp.concatenate(to_cat + [x], axis=1)
-            x = x + self.interpolate_pos_encoding(self.pos_embed, h, w)
+            x = x + pos_embed
 
         return x
 
