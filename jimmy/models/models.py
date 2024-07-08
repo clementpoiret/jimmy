@@ -20,6 +20,21 @@ DINOV2_VITS14 = {
         "qkv_bias": True,
     }
 }
+DINOV2_VITS14_REG = {
+    "name": "dinov2_vits14_reg",
+    "class": "dinov2",
+    "config": {
+        "num_heads": 6,
+        "embed_dim": 384,
+        "mlp_ratio": 4,
+        "patch_size": 14,
+        "init_values": 1.0,
+        "depth": 12,
+        "img_size": 518,
+        "reg_tokens": 4,
+        "qkv_bias": True,
+    }
+}
 DINOV2_VITB14 = {
     "name": "dinov2_vitb14",
     "class": "dinov2",

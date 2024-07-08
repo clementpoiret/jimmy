@@ -10,6 +10,7 @@ from jax.tree_util import DictKey
 DEFAULT_TRANSPOSE_WHITELIST = {
     "cls_token",
     "pos_embed",
+    "register_tokens",
     "mask_token",
 }
 

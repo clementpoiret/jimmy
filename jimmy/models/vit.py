@@ -1,3 +1,4 @@
+import math
 from typing import Callable, Tuple
 
 import jax
@@ -34,6 +35,7 @@ class DinoV2(nnx.Module):
         reg_tokens: int = 1,
         pos_embed: str = "learn",
         no_embed_class: bool = False,
+        pos_embed_reg_tokens: bool = False,
         dynamic_img_size: bool = False,
         dynamic_img_pad: bool = False,
         embed_layer: nnx.Module = PatchEmbed,
@@ -52,11 +54,13 @@ class DinoV2(nnx.Module):
         self.patch_size = patch_size
         self.num_prefix_tokens = 1 if class_token else 0
         self.num_prefix_tokens += reg_tokens
-        self.num_reg_tokens = reg_tokens
+        self.num_embedded_prefix_tokens = 0
+        self.num_register_tokens = reg_tokens
         self.has_class_token = class_token
         self.no_embed_class = no_embed_class  # don't embed prefix positions (includes reg)
         self.interpolate_antialias = interpolate_antialias
         self.dynamic_img_size = dynamic_img_size
+        self.pos_embed_reg_tokens = pos_embed_reg_tokens
 
         self.patch_embed = embed_layer(img_size=img_size,
                                        patch_size=patch_size,
@@ -69,14 +73,23 @@ class DinoV2(nnx.Module):
         self.cls_token = nnx.Param(
             nnx.initializers.zeros(rngs.params(),
                                    [1, 1, embed_dim]),) if class_token else None
-        self.reg_tokens = nnx.Param(
+        self.register_tokens = nnx.Param(
             nnx.initializers.zeros(
                 rngs.params(),
                 [1, reg_tokens, embed_dim],
             )) if reg_tokens else None
 
         self.num_patches = (img_size // patch_size)**2
-        self.embed_len = self.num_patches if no_embed_class else self.num_patches + self.num_prefix_tokens
+
+        if no_embed_class:
+            self.embed_len = self.num_patches
+        elif self.pos_embed_reg_tokens:
+            self.embed_len = self.num_patches + self.num_prefix_tokens
+            self.num_embedded_prefix_tokens += self.num_prefix_tokens
+        else:
+            self.num_embedded_prefix_tokens += 1
+            self.embed_len = self.num_patches + 1
+
         if not pos_embed or pos_embed == "none":
             self.pos_embed = None
         else:
@@ -128,7 +141,8 @@ class DinoV2(nnx.Module):
     ):
         previous_dtype = pos_embed.value.dtype
 
-        num_new_tokens = new_size[0] * new_size[1] + self.num_prefix_tokens
+        num_new_tokens = new_size[0] * new_size[
+            1] + self.num_embedded_prefix_tokens
 
         if num_new_tokens == self.embed_len and new_size[0] == new_size[1]:
             return pos_embed
@@ -180,26 +194,34 @@ class DinoV2(nnx.Module):
                 cls_token_value, (x.shape[0], 1, cls_token_value.shape[-1]))
             to_cat.append(expanded_cls_token)
 
-        if self.reg_tokens is not None:
-            reg_tokens_value = self.reg_tokens.value
-            expanded_reg_tokens = jnp.broadcast_to(
-                reg_tokens_value, (x.shape[0], 1, reg_tokens_value.shape[-1]))
-            to_cat.append(expanded_reg_tokens)
+        # TODO: review cat orders, and pos_embed on x without reg tokens
+        if self.register_tokens is not None:
+            register_tokens_value = self.register_tokens.value
+            expanded_register_tokens = jnp.broadcast_to(
+                register_tokens_value, (x.shape[0], self.num_register_tokens,
+                                        register_tokens_value.shape[-1]))
+            to_cat.append(expanded_register_tokens)
 
-        # WARNING: it seems different compared to
-        # https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
         if self.no_embed_class:
             x = x + pos_embed
             if to_cat:
                 x = jnp.concatenate(to_cat + [x], axis=1)
-        else:
+        elif self.pos_embed_reg_tokens:
+            # Timm impl.
             if to_cat:
                 x = jnp.concatenate(to_cat + [x], axis=1)
             x = x + pos_embed
+        else:
+            # Similar to original dinov2 impl.
+            # https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
+            x = jnp.concatenate(to_cat[:1] + [x], axis=1)
+            x = x + pos_embed
+            if self.register_tokens is not None:
+                x = jnp.concatenate([x[:, :1], to_cat[1], x[:, 1:]], axis=1)
 
         return x
 
-    def __call__(self, x: jnp.ndarray):
+    def features(self, x):
         N, H, W, C = x.shape
 
         x = self.patch_embed(x)
@@ -209,6 +231,21 @@ class DinoV2(nnx.Module):
             _block = getattr(self, f"blocks.{i}")
             x = _block(x)
 
+        return x
+
+    def forward_features(self, x):
+        x = self.features(x)
+        x_norm = self.norm(x)
+
+        return {
+            "x_norm_clstoken": x_norm[:, 0],
+            "x_norm_regtokens": x_norm[:, 1:self.num_register_tokens + 1],
+            "x_norm_patchtokens": x_norm[:, self.num_register_tokens + 1:],
+            "x_prenorm": x,
+        }
+
+    def __call__(self, x: jnp.ndarray):
+        x = self.features(x)
         x = self.norm(x)
         x = self.head(x)
 
