@@ -21,10 +21,10 @@ class SwiGLU(nnx.Module):
         hidden_features = hidden_features or in_features
 
         self.w12 = nnx.Linear(in_features,
-                              2 * hidden_features,
+                              hidden_features,
                               use_bias=bias,
                               rngs=rngs)
-        self.w3 = nnx.Linear(hidden_features,
+        self.w3 = nnx.Linear(hidden_features // 2,
                              out_features,
                              use_bias=bias,
                              rngs=rngs)
