@@ -2,6 +2,7 @@
 # https://github.com/radarFudan/mamba-minimal-jax/blob/b76334404f7f1d87e47ffc1158b1bd151098d1c2/model.py
 
 import jax.numpy as jnp
+from einops import einsum
 from flax import nnx
 
 
@@ -38,7 +39,7 @@ def selective_scan(u: jnp.ndarray,
         selective_scan_ref(), https://github.com/state-spaces/mamba/blob/main/mamba_ssm/ops/selective_scan_interface.py#L86
         Note: I refactored some parts out of `selective_scan_ref` out, so the functionality doesn't match exactly.
     """
-    (b, l, d_in) = u.shape
+    b, d_in, l = u.shape
     n = A.shape[1]
 
     if delta_bias is not None:
@@ -47,18 +48,18 @@ def selective_scan(u: jnp.ndarray,
         delta = nnx.softplus(delta)
 
     # Discretize continuous parameters (A, B)
-    deltaA = jnp.exp(jnp.einsum('b l d, d n -> b l d n', delta, A))
-    deltaB_u = jnp.einsum('b l d, b l n, b l d -> b l d n', delta, B, u)
+    deltaA = jnp.exp(einsum(delta, A, "b d l, d n -> b l d n"))
+    deltaB_u = einsum(delta, B, u, 'b d l, b n l, b d l -> b l d n')
 
     # Perform selective scan (see scan_SSM() in The Annotated S4 [2])
     x = jnp.zeros((b, d_in, n))
     ys = []
     for i in range(l):
         x = deltaA[:, i] * x + deltaB_u[:, i]
-        y = jnp.einsum('b d n, b n -> b d', x, C[:, i, :])
+        y = einsum(x, C[:, :, i], "b d n, b n -> b d")
         ys.append(y)
-    y = jnp.stack(ys, axis=1)  # shape (b, l, d_in)
+    y = jnp.stack(ys, axis=2)  # shape (b, l, d_in)
 
-    y = y + u * D
+    y = y + u * jnp.expand_dims(D, axis=-1)
 
     return y

@@ -45,8 +45,6 @@ class DropPath(nnx.Module):
         self.rng_collection = rng_collection
         self.rngs = rngs
 
-        Ellipsis
-
     def __call__(
         self,
         x: jnp.ndarray,
