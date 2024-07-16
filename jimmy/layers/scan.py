@@ -25,15 +25,15 @@ def selective_scan(u: jnp.ndarray,
     except B and C (and the step size delta, which is used for discretization) are dependent on the input x(t).
 
     Args:
-        u: shape (b, l, d_in)    (See Glossary at top for definitions of b, l, d_in, n...)
-        delta: shape (b, l, d_in)
-        A: shape (d_in, n)
-        B: shape (b, l, n)
-        C: shape (b, l, n)
-        D: shape (d_in,)
+        u: shape (b, d, l)    (See Glossary at top for definitions of b, d, n, l...)
+        delta: shape (b, d, l)
+        A: shape (d, n)
+        B: shape (b, n, l)
+        C: shape (b, n, l)
+        D: shape (d,)
 
     Returns:
-        output: shape (b, l, d_in)
+        output: shape (b, d, l)
 
     Official Implementation:
         selective_scan_ref(), https://github.com/state-spaces/mamba/blob/main/mamba_ssm/ops/selective_scan_interface.py#L86
