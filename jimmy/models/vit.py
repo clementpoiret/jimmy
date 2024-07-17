@@ -105,8 +105,8 @@ class DinoV2(nnx.Module):
                                        dynamic_img_pad=dynamic_img_pad,
                                        rngs=rngs)
         self.cls_token = nnx.Param(
-            nnx.initializers.zeros(rngs.params(),
-                                   [1, 1, embed_dim]),) if class_token else None
+            nnx.initializers.zeros(
+                rngs.params(), [1, 1, embed_dim]), ) if class_token else None
         self.register_tokens = nnx.Param(
             nnx.initializers.zeros(
                 rngs.params(),

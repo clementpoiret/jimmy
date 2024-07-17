@@ -104,19 +104,23 @@ class PatchEmbed(nnx.Module):
 
         if self.img_size is not None:
             if not self.dynamic_img_size:
-                if H != self.img_size[
-                    0]:
-                    raise AssertionError(f"Input height ({H}) doesn't match model ({self.img_size[0]})")
-                if W != self.img_size[
-                    1]:
-                    raise AssertionError(f"Input width ({W}) doesn't match model ({self.img_size[1]})")
+                if H != self.img_size[0]:
+                    raise AssertionError(
+                        f"Input height ({H}) doesn't match model ({self.img_size[0]})"
+                    )
+                if W != self.img_size[1]:
+                    raise AssertionError(
+                        f"Input width ({W}) doesn't match model ({self.img_size[1]})"
+                    )
             elif not self.dynamic_img_pad:
-                if H % self.patch_size[
-                    0] != 0:
-                    raise AssertionError(f"Input height ({H}) should be divisible by patch size ({self.patch_size[0]})")
-                if W % self.patch_size[
-                    1] != 0:
-                    raise AssertionError(f"Input width ({W}) should be divisible by patch size ({self.patch_size[1]})")
+                if H % self.patch_size[0] != 0:
+                    raise AssertionError(
+                        f"Input height ({H}) should be divisible by patch size ({self.patch_size[0]})"
+                    )
+                if W % self.patch_size[1] != 0:
+                    raise AssertionError(
+                        f"Input width ({W}) should be divisible by patch size ({self.patch_size[1]})"
+                    )
 
         if self.dynamic_img_pad:
             pad_h = (self.patch_size[0] -
