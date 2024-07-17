@@ -135,7 +135,7 @@ class DinoV2(nnx.Module):
         if drop_path_uniform:
             dpr = [drop_path_rate] * depth
         else:
-            dpr = [rate for rate in jnp.linspace(0, drop_path_rate, depth)]
+            dpr = list(jnp.linspace(0, drop_path_rate, depth))
 
         # To respect the original naming
         for i in range(depth):
