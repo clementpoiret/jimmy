@@ -80,7 +80,8 @@ class DinoV2(nnx.Module):
         interpolate_antialias=False,
         rngs: nnx.Rngs = None,
     ):
-        assert pos_embed in ("", "none", "learn")
+        if pos_embed not in ("", "none", "learn"):
+            raise AssertionError
 
         self.embed_dim = embed_dim
         self.depth = depth

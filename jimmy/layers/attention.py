@@ -61,9 +61,10 @@ class Attention(nnx.Module):
             AssertionError: If input embedding dimension doesn't match layer embedding dimension.
         """
         B, N, C = x.shape
-        assert (
-            C == self.dim
-        ), f"Input embedding dimension ({C}) should match layer embedding dimension ({self.dim})."
+        if (C != self.dim):
+            raise AssertionError(
+                f"Input embedding dimension ({C}) should match layer embedding dimension ({self.dim})."
+            )
 
         qkv = self.qkv(x)
         qkv = jnp.reshape(qkv, (B, N, 3, self.num_heads, C // self.num_heads))
