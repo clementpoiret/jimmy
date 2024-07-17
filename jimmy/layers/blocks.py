@@ -40,7 +40,7 @@ class LayerScale(nnx.Module):
             rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
         """
         self.gamma = nnx.Param(
-            init_values * nnx.initializers.ones(rngs.params(), [dim]),)
+            init_values * nnx.initializers.ones(rngs.params(), [dim]), )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply layer scaling to the input.
@@ -120,7 +120,7 @@ class DropPath(nnx.Module):
 
         keep_prob = 1.0 - self.drop_prob
 
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        shape = (x.shape[0], ) + (1, ) * (x.ndim - 1)
         random_tensor = jax.random.bernoulli(rng, p=keep_prob, shape=shape)
 
         if keep_prob > 0.0 and self.scale_by_keep:
@@ -204,8 +204,8 @@ class Block(nnx.Module):
 
         self.ls1 = LayerScale(dim, init_values,
                               rngs=rngs) if init_values else Identity()
-        self.drop_path1 = DropPath(drop_path,
-                                   rngs=rngs) if drop_path > 0. else Identity()
+        self.drop_path1 = DropPath(
+            drop_path, rngs=rngs) if drop_path > 0. else Identity()
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
         self.mlp = ffn_layer(
@@ -218,8 +218,8 @@ class Block(nnx.Module):
         )
         self.ls2 = LayerScale(dim, init_values,
                               rngs=rngs) if init_values else Identity()
-        self.drop_path2 = DropPath(drop_path,
-                                   rngs=rngs) if drop_path > 0. else Identity()
+        self.drop_path2 = DropPath(
+            drop_path, rngs=rngs) if drop_path > 0. else Identity()
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
@@ -281,8 +281,8 @@ class ConvBlock(nnx.Module):
         self.norm2 = norm_layer(num_features=dim, **norm_params)
         self.ls1 = LayerScale(dim, init_values,
                               rngs=rngs) if init_values else Identity()
-        self.drop_path1 = DropPath(drop_path,
-                                   rngs=rngs) if drop_path > 0. else Identity()
+        self.drop_path1 = DropPath(
+            drop_path, rngs=rngs) if drop_path > 0. else Identity()
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the ConvBlock to the input.
