@@ -295,7 +295,42 @@ class MambaVisionMixer(nnx.Module):
 
 
 class MambaVisionLayer(nnx.Module):
-    """Base layer of MambaVision"""
+    """Base layer of MambaVision.
+
+    This class implements a layer of the MambaVision architecture, which can be either
+    a convolutional block or a transformer block, optionally followed by a downsampling operation.
+
+    Attributes:
+        conv (bool): Whether to use convolutional blocks instead of transformer blocks.
+        blocks (list): List of Block or ConvBlock instances.
+        transformer_block (bool): Whether the layer uses transformer blocks.
+        downsample (Downsample | None): Downsampling operation, if applicable.
+        do_gt (bool): Flag for global token usage (currently not implemented).
+        window_size (int): Size of the window for windowed attention in transformer blocks.
+
+    Args:
+        dim (int): Number of input channels.
+        depth (int): Number of blocks in the layer.
+        num_heads (int): Number of attention heads in transformer blocks.
+        window_size (int): Size of the window for windowed attention.
+        conv (bool, optional): Whether to use convolutional blocks. Defaults to False.
+        downsample (bool, optional): Whether to apply downsampling after the blocks. Defaults to True.
+        mlp_ratio (float, optional): Ratio of MLP hidden dim to embedding dim. Defaults to 4.0.
+        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Defaults to True.
+        qk_norm (bool, optional): Whether to apply normalization to query and key. Defaults to False.
+        ffn_bias (bool, optional): If True, use bias in the feed-forward network. Defaults to True.
+        proj_bias (bool, optional): If True, use bias in the projection layers. Defaults to True.
+        proj_drop (float, optional): Dropout rate for projection layers. Defaults to 0.0.
+        attn_drop (float, optional): Dropout rate for attention. Defaults to 0.0.
+        drop_path (float | list, optional): Stochastic depth rate. Defaults to 0.0.
+        init_values (float | None, optional): Initial layer scale value. Defaults to None.
+        init_values_conv (float | None, optional): Initial layer scale value for conv blocks. Defaults to None.
+        attention (Callable, optional): Attention mechanism to use. Defaults to Attention.
+        act_layer (Callable, optional): Activation function to use. Defaults to nnx.gelu.
+        norm_layer (Callable, optional): Normalization layer to use. Defaults to nnx.LayerNorm.
+        ffn_layer (Callable, optional): Feed-forward network layer to use. Defaults to Mlp.
+        transformer_blocks (list, optional): List of transformer block types. Defaults to [].
+    """
 
     def __init__(self,
                  dim: int,
