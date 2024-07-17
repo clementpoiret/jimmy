@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from flax import nnx
 
 from jimmy.layers.attention import Attention
-from jimmy.layers.blocks import Identity, ViTBlock
+from jimmy.layers.blocks import Block, Identity
 from jimmy.layers.mlp import Mlp
 from jimmy.layers.patch_embed import PatchEmbed
 
@@ -76,7 +76,7 @@ class DinoV2(nnx.Module):
         dynamic_img_pad: bool = False,
         embed_layer: nnx.Module = PatchEmbed,
         act_layer: Callable = nnx.gelu,
-        block: nnx.Module = ViTBlock,
+        block: nnx.Module = Block,
         attention: nnx.Module = Attention,
         ffn_layer: nnx.Module = Mlp,
         init_values: float | None = None,
@@ -214,7 +214,8 @@ class DinoV2(nnx.Module):
             method=interpolation,
             antialias=antialias,
         )
-        pos_embed = pos_embed.reshape(1, -1, self.embed_dim).astype(previous_dtype)
+        pos_embed = pos_embed.reshape(1, -1,
+                                      self.embed_dim).astype(previous_dtype)
 
         if prefix_embed is not None:
             pos_embed = jnp.concatenate([prefix_embed, pos_embed], axis=1)
