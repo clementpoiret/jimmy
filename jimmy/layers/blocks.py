@@ -10,12 +10,22 @@ from jimmy.layers.mlp import Mlp
 
 
 class Identity(nnx.Module):
+    """An identity module that returns the input unchanged."""
 
-    def __call__(self, x: jnp.ndarray):
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply the identity operation.
+
+        Args:
+            x (jnp.ndarray): Input array.
+
+        Returns:
+            jnp.ndarray: The input array unchanged.
+        """
         return x
 
 
 class LayerScale(nnx.Module):
+    """Layer scale module for scaling the output of a layer."""
 
     def __init__(
         self,
@@ -23,10 +33,25 @@ class LayerScale(nnx.Module):
         init_values: float = 1e-5,
         rngs: nnx.Rngs = None,
     ):
+        """Initialize the LayerScale module.
+
+        Args:
+            dim (int): The dimension of the input.
+            init_values (float, optional): Initial value for scaling. Defaults to 1e-5.
+            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
+        """
         self.gamma = nnx.Param(
             init_values * nnx.initializers.ones(rngs.params(), [dim]),)
 
-    def __call__(self, x: jnp.ndarray):
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply layer scaling to the input.
+
+        Args:
+            x (jnp.ndarray): Input array.
+
+        Returns:
+            jnp.ndarray: Scaled output.
+        """
         return x * self.gamma
 
 
@@ -39,6 +64,15 @@ class DropPath(nnx.Module):
                  deterministic: bool = False,
                  rng_collection: str = "dropout",
                  rngs: nnx.Rngs = None):
+        """Initialize the DropPath module.
+
+        Args:
+            drop_prob (float, optional): Probability of dropping a path. Defaults to 0.
+            scale_by_keep (bool, optional): Whether to scale the kept values. Defaults to True.
+            deterministic (bool, optional): Whether to use deterministic behavior. Defaults to False.
+            rng_collection (str, optional): Name of the RNG collection. Defaults to "dropout".
+            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
+        """
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
         self.deterministic = deterministic
@@ -51,7 +85,17 @@ class DropPath(nnx.Module):
         *,
         deterministic: bool | None = None,
         rngs: nnx.Rngs | None = None,
-    ):
+    ) -> jnp.ndarray:
+        """Apply DropPath to the input.
+
+        Args:
+            x (jnp.ndarray): Input array.
+            deterministic (bool | None, optional): Override for deterministic behavior. Defaults to None.
+            rngs (nnx.Rngs | None, optional): Override for random number generator state. Defaults to None.
+
+        Returns:
+            jnp.ndarray: Output after applying DropPath.
+        """
         deterministic = first_from(
             deterministic,
             self.deterministic,
@@ -88,6 +132,7 @@ class DropPath(nnx.Module):
 
 
 class ViTBlock(nnx.Module):
+    """Vision Transformer (ViT) block."""
 
     def __init__(
         self,
@@ -108,6 +153,26 @@ class ViTBlock(nnx.Module):
         ffn_layer: nnx.Module = Mlp,
         rngs: nnx.Rngs = None,
     ):
+        """Initialize the ViTBlock.
+
+        Args:
+            dim (int): Input dimension.
+            num_heads (int): Number of attention heads.
+            mlp_ratio (float, optional): Ratio of mlp hidden dim to embedding dim. Defaults to 4.
+            qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Defaults to True.
+            qk_norm (bool, optional): If True, normalize the query and key. Defaults to False.
+            ffn_bias (bool, optional): If True, use bias in the feed-forward network. Defaults to True.
+            proj_bias (bool, optional): If True, use bias in projections. Defaults to True.
+            proj_drop (float, optional): Dropout rate of the projection. Defaults to 0.
+            attn_drop (float, optional): Dropout rate of the attention. Defaults to 0.
+            init_values (Optional[float], optional): Initial value for LayerScale. Defaults to None.
+            drop_path (float, optional): Stochastic depth rate. Defaults to 0.
+            attention (nnx.Module, optional): Attention module. Defaults to Attention.
+            act_layer (Callable, optional): Activation function. Defaults to nnx.gelu.
+            norm_layer (nnx.Module, optional): Normalization layer. Defaults to nnx.LayerNorm.
+            ffn_layer (nnx.Module, optional): Feed-forward network module. Defaults to Mlp.
+            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
+        """
         self.norm1 = norm_layer(num_features=dim, rngs=rngs)
         self.attn = attention(
             dim,
@@ -139,7 +204,15 @@ class ViTBlock(nnx.Module):
         self.drop_path2 = DropPath(drop_path,
                                    rngs=rngs) if drop_path > 0. else Identity()
 
-    def __call__(self, x: jnp.ndarray):
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply the ViT block to the input.
+
+        Args:
+            x (jnp.ndarray): Input tensor.
+
+        Returns:
+            jnp.ndarray: Output after applying the ViT block.
+        """
         x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
         x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
 
@@ -147,6 +220,7 @@ class ViTBlock(nnx.Module):
 
 
 class ConvBlock(nnx.Module):
+    """Convolutional block with normalization, activation, and residual connection."""
 
     def __init__(
         self,
@@ -159,6 +233,18 @@ class ConvBlock(nnx.Module):
         init_values: Optional[float] = None,
         rngs: nnx.Rngs = None,
     ):
+        """Initialize the ConvBlock.
+
+        Args:
+            dim (int): Number of input and output channels.
+            kernel_size (tuple, optional): Size of the convolutional kernel. Defaults to (3, 3).
+            act_layer (Callable, optional): Activation function. Defaults to nnx.gelu.
+            norm_layer (Callable, optional): Normalization layer. Defaults to nnx.BatchNorm.
+            norm_params (dict, optional): Parameters for normalization layer. Defaults to {"epsilon": 1e-5}.
+            drop_path (float, optional): Drop path rate. Defaults to 0.
+            init_values (Optional[float], optional): Initial value for LayerScale. Defaults to None.
+            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
+        """
         self.conv1 = nnx.Conv2d(in_features=dim,
                                 out_features=dim,
                                 kernel_size=kernel_size,
@@ -166,7 +252,7 @@ class ConvBlock(nnx.Module):
                                 padding="SAME",
                                 use_bias=True,
                                 rngs=rngs)
-        self.norm1 = norm_layer(num_features=dim, **norm_layer),
+        self.norm1 = norm_layer(num_features=dim, **norm_params)
         self.act = act_layer
         self.conv2 = nnx.Conv2d(in_features=dim,
                                 out_features=dim,
@@ -175,13 +261,21 @@ class ConvBlock(nnx.Module):
                                 padding="SAME",
                                 use_bias=True,
                                 rngs=rngs)
-        self.norm2 = norm_layer(num_features=dim, **norm_layer),
+        self.norm2 = norm_layer(num_features=dim, **norm_params)
         self.ls1 = LayerScale(dim, init_values,
                               rngs=rngs) if init_values else Identity()
         self.drop_path1 = DropPath(drop_path,
                                    rngs=rngs) if drop_path > 0. else Identity()
 
-    def __call__(self, x: jnp.ndarray):
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply the ConvBlock to the input.
+
+        Args:
+            x (jnp.ndarray): Input tensor.
+
+        Returns:
+            jnp.ndarray: Output after applying the ConvBlock.
+        """
         x2 = self.act(self.norm1(self.conv1(x)))
         x2 = self.ls1(self.norm2(self.conv2(x2)))
         x = x + self.drop_path1(x2)
