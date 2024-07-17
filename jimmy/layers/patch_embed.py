@@ -1,4 +1,5 @@
 from typing import Callable, List, Optional, Tuple, Union
+import math
 
 import jax.numpy as jnp
 from flax import nnx
