@@ -353,7 +353,8 @@ class MambaVisionLayer(nnx.Module):
                  act_layer: Callable = nnx.gelu,
                  norm_layer: Callable = nnx.LayerNorm,
                  ffn_layer: Callable = Mlp,
-                 transformer_blocks: list = []):
+                 transformer_blocks: list = [],
+                 rngs: nnx.Rngs = None):
         self.conv = conv
 
         if conv:
@@ -386,7 +387,7 @@ class MambaVisionLayer(nnx.Module):
                     attention=attention,
                     act_layer=act_layer,
                     norm_layer=norm_layer,
-                    ffn_layer=mlp,
+                    ffn_layer=ffn_layer,
                     rngs=rngs,
                 ) for i, block_type in enumerate(transformer_blocks)
             ]
