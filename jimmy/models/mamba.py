@@ -89,11 +89,11 @@ class MambaVision(nnx.Module):
         dpr = jnp.linspace(0, drop_path_rate, sum(depths))
 
         self.levels = []
-        for i in range(len(depths)):
+        for i, item in enumerate(depths):
             conv = i > 2
             level = MambaVisionLayer(
                 dim=int(dim * 2**i),
-                depth=depths[i],
+                depth=item,
                 num_heads=num_heads[i],
                 window_size=window_size[i],
                 conv=conv,
@@ -113,7 +113,7 @@ class MambaVision(nnx.Module):
                 act_layer=act_layer,
                 norm_layer=norm_layer,
                 ffn_layer=ffn_layer,
-                block_types=self._get_block_types(depths[i]),
+                block_types=self._get_block_types(item),
                 rngs=rngs)
             self.levels.append(level)
 
