@@ -22,10 +22,18 @@ def selective_scan(u: jnp.ndarray,
     This is the classic discrete state space formula:
         x(t + 1) = Ax(t) + Bu(t)
         y(t)     = Cx(t) + Du(t)
-    except B and C (and the step size delta, which is used for discretization) are dependent on the input x(t).
+    except B and C (and the step size delta, which is used for discretization)
+    are dependent on the input x(t).
+
+    Definitions:
+        - b: batch size (`B` in [1]),
+        - l: sequence length (`L` in [1]),
+        - d and d_model: hidden dim,
+        - n and d_state: latent space dim (`N` in [1]),
+        - dt or delta: input-dependent step size.
 
     Args:
-        u: shape (b, d, l)    (See Glossary at top for definitions of b, d, n, l...)
+        u: shape (b, d, l)
         delta: shape (b, d, l)
         A: shape (d, n)
         B: shape (b, n, l)
@@ -37,7 +45,6 @@ def selective_scan(u: jnp.ndarray,
 
     Official Implementation:
         selective_scan_ref(), https://github.com/state-spaces/mamba/blob/main/mamba_ssm/ops/selective_scan_interface.py#L86
-        Note: I refactored some parts out of `selective_scan_ref` out, so the functionality doesn't match exactly.
     """
     b, d_in, l = u.shape
     n = A.shape[1]

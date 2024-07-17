@@ -154,7 +154,7 @@ class ConvBlock(nnx.Module):
         kernel_size=(3, 3),
         act_layer: Callable = nnx.gelu,
         norm_layer: Callable = nnx.BatchNorm,
-        norm_params: dict = {"epsilon": 1e-4},
+        norm_params: dict = {"epsilon": 1e-5},
         drop_path: float = 0.,
         init_values: Optional[float] = None,
         rngs: nnx.Rngs = None,

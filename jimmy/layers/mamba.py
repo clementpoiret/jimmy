@@ -47,7 +47,18 @@ def custom_tensor(tensor, dtype=jnp.float_):
 
 
 class MambaVisionMixer(nnx.Module):
-    """MambaVision Mixer from Ali Hatamizadeh and Jan Kautz."""
+    """MambaVision Mixer from Ali Hatamizadeh and Jan Kautz.
+
+    Definitions:
+        - b: batch size (`B` in [1]),
+        - l: sequence length (`L` in [1]),
+        - d and d_model: hidden dim,
+        - n and d_state: latent space dim (`N` in [1]),
+        - expand: expansion factor (`E` in [1]),
+        - d_in and d_inner: d*expand (`D` in [1]),
+        - A, B, C, D: state space parameters (See any state space representation formula),
+        - dt or delta: input-dependent step size.
+    """
 
     def __init__(
         self,
