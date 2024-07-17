@@ -9,10 +9,49 @@ from jimmy.layers import (Attention, ConvPatchEmbed, Identity, MambaVisionLayer,
 
 
 def adaptive_avg_pool2d(x: jnp.ndarray):
+    """
+    Perform adaptive average pooling on a 4D input tensor.
+
+    Args:
+        x (jnp.ndarray): Input tensor of shape (batch_size, height, width, channels).
+
+    Returns:
+        jnp.ndarray: Output tensor of shape (batch_size, channels, 1, 1).
+    """
     return reduce(x, "b h w c -> b c 1 1", "mean")
 
 
 class MambaVision(nnx.Module):
+    """
+    MambaVision model architecture.
+
+    This class implements the MambaVision model, which combines elements of
+    vision transformers and convolutional neural networks.
+
+    Args:
+        in_features (int): Number of input channels.
+        dim (int): Base dimension of the model.
+        in_dim (int): Input dimension for the patch embedding.
+        depths (List[int]): Number of blocks in each stage.
+        window_size (List[int]): Window sizes for each stage.
+        mlp_ratio (float): Ratio of MLP hidden dim to embedding dim.
+        num_heads (List[int]): Number of attention heads in each stage.
+        drop_path_rate (float, optional): Stochastic depth rate. Defaults to 0.2.
+        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Defaults to True.
+        qkv_norm (bool, optional): If True, apply normalization to query, key, value. Defaults to True.
+        ffn_bias (bool, optional): If True, use bias in the feed-forward network. Defaults to True.
+        proj_bias (bool, optional): If True, use bias in the projection layers. Defaults to True.
+        proj_drop (float, optional): Dropout rate for projection layers. Defaults to 0.0.
+        attn_drop (float, optional): Dropout rate for attention. Defaults to 0.0.
+        init_values (float | None, optional): Initial layer scale value. Defaults to None.
+        init_values_conv (float | None, optional): Initial layer scale value for conv blocks. Defaults to None.
+        transformer_attention (Callable, optional): Attention mechanism to use. Defaults to Attention.
+        mamba_mixer (Callable, optional): Mamba mixer to use. Defaults to MambaVisionMixer.
+        act_layer (Callable, optional): Activation function to use. Defaults to nnx.gelu.
+        norm_layer (Callable, optional): Normalization layer to use. Defaults to nnx.LayerNorm.
+        ffn_layer (Callable, optional): Feed-forward network layer to use. Defaults to Mlp.
+        num_classes (int, optional): Number of classes for classification. Defaults to 1000.
+    """
 
     def __init__(
         self,
@@ -82,12 +121,31 @@ class MambaVision(nnx.Module):
                                rngs=rngs) if num_classes else Identity()
 
     def _get_block_types(l: int):
+        """
+        Generate a list of block types for a layer.
+
+        Args:
+            l (int): Total number of blocks in the layer.
+
+        Returns:
+            List[str]: A list of block types, with the first half being "mambavisionmixer"
+                       and the second half being "attention".
+        """
         first_half_size = (l + 1) // 2
         second_half_size = l // 2
         return ["mambavisionmixer"] * first_half_size + ["attention"
                                                         ] * second_half_size
 
     def forward_features(self, x: jnp.ndarray):
+        """
+        Compute features through the network.
+
+        Args:
+            x (jnp.ndarray): Input tensor of shape (batch_size, height, width, channels).
+
+        Returns:
+            jnp.ndarray: Output features of shape (batch_size, num_features).
+        """
         x = self.patch_embed(x)
         for level in self.levels:
             x = level(x)
@@ -98,6 +156,15 @@ class MambaVision(nnx.Module):
         return x
 
     def __call__(self, x: jnp.ndarray):
+        """
+        Forward pass of the MambaVision model.
+
+        Args:
+            x (jnp.ndarray): Input tensor of shape (batch_size, height, width, channels).
+
+        Returns:
+            jnp.ndarray: Output tensor of shape (batch_size, num_classes).
+        """
         x = self.forward_features(x)
         x = self.head(x)
 
