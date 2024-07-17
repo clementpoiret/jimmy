@@ -1,16 +1,13 @@
 import logging
-import os
 import shutil
 from pathlib import Path
 from typing import Dict, Optional
 from urllib.request import urlretrieve
 
-import jax.numpy as jnp
 import orbax
 import py7zr
 from flax import nnx
 from flax.training import orbax_utils
-from tqdm import tqdm
 
 DEFAULT_MODEL_DIR = Path.home() / ".jimmy" / "hub" / "checkpoints"
 FILTERS = [{"id": py7zr.FILTER_ZSTD, "level": 3}]
