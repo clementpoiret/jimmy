@@ -77,6 +77,7 @@ class MambaVision(nnx.Module):
         norm_layer: Callable = nnx.LayerNorm,
         ffn_layer: Callable = Mlp,
         num_classes: int = 1000,
+        rngs: nnx.Rngs = None,
     ):
         num_features = int(dim * 2**(len(depths) - 1))
         self.num_classes = num_classes
@@ -84,7 +85,7 @@ class MambaVision(nnx.Module):
         self.patch_embed = ConvPatchEmbed(in_features=in_features,
                                           hidden_features=in_dim,
                                           out_features=dim,
-                                          rngs=rngs)
+                                          rngs=rngs if rngs is not None else nnx.Rngs())
         dpr = jnp.linspace(0, drop_path_rate, sum(depths))
 
         self.levels = []
@@ -99,7 +100,7 @@ class MambaVision(nnx.Module):
                 downsample=i < 3,
                 mlp_ratio=mlp_ratio,
                 qkv_bias=qkv_bias,
-                qk_norm=qk_norm,
+                qk_norm=qkv_norm,
                 ffn_bias=ffn_bias,
                 proj_bias=proj_bias,
                 proj_drop=proj_drop,
@@ -113,12 +114,12 @@ class MambaVision(nnx.Module):
                 norm_layer=norm_layer,
                 ffn_layer=ffn_layer,
                 block_types=self._get_block_types(depths[i]),
-                rngs=rngs)
+                rngs=rngs if rngs is not None else nnx.Rngs())
             self.levels.append(level)
 
-        self.norm = nnx.BatchNorm(num_features=num_features, rngs=rngs)
+        self.norm = nnx.BatchNorm(num_features=num_features, rngs=rngs if rngs is not None else nnx.Rngs())
         self.head = nnx.Linear(num_features, num_classes,
-                               rngs=rngs) if num_classes else Identity()
+                               rngs=rngs if rngs is not None else nnx.Rngs()) if num_classes else Identity()
 
     def _get_block_types(l: int):
         """
