@@ -83,9 +83,8 @@ class PatchEmbed(nnx.Module):
         if self.dynamic_img_pad:
             return math.ceil(img_size[0] / self.patch_size[0]), math.ceil(
                 img_size[1] / self.patch_size[1])
-        else:
-            return img_size[0] // self.patch_size[0], img_size[
-                1] // self.patch_size[1]
+        return img_size[0] // self.patch_size[0], img_size[
+            1] // self.patch_size[1]
 
     def __call__(self, x: jnp.ndarray):
         """
