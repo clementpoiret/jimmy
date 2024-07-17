@@ -1,6 +1,6 @@
 version = 1
 
-exclude_patterns = ["__init__.py"]
+exclude_patterns = ["**/__init__.py"]
 
 [[analyzers]]
 name = "python"
