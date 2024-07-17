@@ -38,7 +38,7 @@ class MambaVision(nnx.Module):
         num_heads (List[int]): Number of attention heads in each stage.
         drop_path_rate (float, optional): Stochastic depth rate. Defaults to 0.2.
         qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Defaults to True.
-        qkv_norm (bool, optional): If True, apply normalization to query, key, value. Defaults to True.
+        qk_norm (bool, optional): If True, apply normalization to query, key, value. Defaults to True.
         ffn_bias (bool, optional): If True, use bias in the feed-forward network. Defaults to True.
         proj_bias (bool, optional): If True, use bias in the projection layers. Defaults to True.
         proj_drop (float, optional): Dropout rate for projection layers. Defaults to 0.0.
@@ -64,7 +64,7 @@ class MambaVision(nnx.Module):
         num_heads: List[int],
         drop_path_rate: float = 0.2,
         qkv_bias: bool = True,
-        qkv_norm: bool = True,
+        qk_norm: bool = True,
         ffn_bias: bool = True,
         proj_bias: bool = True,
         proj_drop: float = 0.,
@@ -85,7 +85,7 @@ class MambaVision(nnx.Module):
         self.patch_embed = ConvPatchEmbed(in_features=in_features,
                                           hidden_features=in_dim,
                                           out_features=dim,
-                                          rngs=rngs if rngs is not None else nnx.Rngs())
+                                          rngs=rngs)
         dpr = jnp.linspace(0, drop_path_rate, sum(depths))
 
         self.levels = []
@@ -100,7 +100,7 @@ class MambaVision(nnx.Module):
                 downsample=i < 3,
                 mlp_ratio=mlp_ratio,
                 qkv_bias=qkv_bias,
-                qk_norm=qkv_norm,
+                qk_norm=qk_norm,
                 ffn_bias=ffn_bias,
                 proj_bias=proj_bias,
                 proj_drop=proj_drop,
@@ -114,12 +114,12 @@ class MambaVision(nnx.Module):
                 norm_layer=norm_layer,
                 ffn_layer=ffn_layer,
                 block_types=self._get_block_types(depths[i]),
-                rngs=rngs if rngs is not None else nnx.Rngs())
+                rngs=rngs)
             self.levels.append(level)
 
-        self.norm = nnx.BatchNorm(num_features=num_features, rngs=rngs if rngs is not None else nnx.Rngs())
+        self.norm = nnx.BatchNorm(num_features=num_features, rngs=rngs)
         self.head = nnx.Linear(num_features, num_classes,
-                               rngs=rngs if rngs is not None else nnx.Rngs()) if num_classes else Identity()
+                               rngs=rngs) if num_classes else Identity()
 
     def _get_block_types(l: int):
         """
