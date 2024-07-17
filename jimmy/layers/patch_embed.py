@@ -169,7 +169,7 @@ class ConvPatchEmbed(nnx.Module):
                        padding="SAME",
                        use_bias=False,
                        rngs=rngs),
-            norm_layer(num_features=hidden_features, **norm_params),
+            norm_layer(num_features=hidden_features, rngs=rngs, **norm_params),
             act_layer,
             nnx.Conv2d(in_features=hidden_features,
                        out_features=out_features,
@@ -178,7 +178,7 @@ class ConvPatchEmbed(nnx.Module):
                        padding="SAME",
                        use_bias=False,
                        rngs=rngs),
-            norm_layer(num_features=out_features, **norm_params),
+            norm_layer(num_features=out_features, rngs=rngs, **norm_params),
             act_layer,
         ])
 

@@ -329,14 +329,15 @@ class MambaVisionLayer(nnx.Module):
         act_layer (Callable, optional): Activation function to use. Defaults to nnx.gelu.
         norm_layer (Callable, optional): Normalization layer to use. Defaults to nnx.LayerNorm.
         ffn_layer (Callable, optional): Feed-forward network layer to use. Defaults to Mlp.
-        transformer_blocks (list, optional): List of transformer block types. Defaults to [].
+        block_types (list, optional): List of transformer block types. Defaults to [].
+        rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
     """
 
     def __init__(self,
                  dim: int,
                  depth: int,
                  num_heads: int,
-                 window_size,
+                 window_size: int,
                  conv: bool = False,
                  downsample: bool = True,
                  mlp_ratio: float = 4.,
@@ -350,11 +351,11 @@ class MambaVisionLayer(nnx.Module):
                  init_values: float | None = None,
                  init_values_conv: float | None = None,
                  transformer_attention: Callable = Attention,
-                 mamba_mixer=MambaVisionMixer,
+                 mamba_mixer: Callable = MambaVisionMixer,
                  act_layer: Callable = nnx.gelu,
                  norm_layer: Callable = nnx.LayerNorm,
                  ffn_layer: Callable = Mlp,
-                 transformer_blocks: list = [],
+                 block_types: list = [],
                  rngs: nnx.Rngs = None):
         self.conv = conv
 
@@ -391,7 +392,7 @@ class MambaVisionLayer(nnx.Module):
                     norm_layer=norm_layer,
                     ffn_layer=ffn_layer,
                     rngs=rngs,
-                ) for i, block_type in enumerate(transformer_blocks)
+                ) for i, block_type in enumerate(block_types)
             ]
             self.transformer_block = True
 

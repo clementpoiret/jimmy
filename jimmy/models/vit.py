@@ -5,10 +5,7 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from jimmy.layers.attention import Attention
-from jimmy.layers.blocks import Block, Identity
-from jimmy.layers.mlp import Mlp
-from jimmy.layers.patch_embed import PatchEmbed
+from jimmy.layers import Attention, Block, Identity, Mlp, PatchEmbed
 
 # TODO: pos_drop
 # TODO: compare to prepare_tokens_with_masks
