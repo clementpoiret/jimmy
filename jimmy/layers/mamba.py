@@ -6,7 +6,7 @@ from einops import rearrange
 from flax import nnx
 from jax import dtypes, random
 
-from jimmy.layers.scan import selective_scan
+from jimmy.ops.scan import selective_scan
 
 
 def custom_uniform(scale, dtype=jnp.float_):
