@@ -1,11 +1,11 @@
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import jax.numpy as jnp
 from flax import nnx
 
 
 class PatchEmbed(nnx.Module):
-    """Image to Patch Embedding"""
+    """Image to Patch Embedding, inspired from Timm"""
 
     def __init__(
         self,
@@ -100,3 +100,41 @@ class PatchEmbed(nnx.Module):
             x = jnp.reshape(x, (-1, H, W, self.embed_dim))
 
         return x
+
+
+class ConvPatchEmbed(nnx.Module):
+    """Image to Patch Embedding, used in MambaVision"""
+
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: int,
+        out_features: int,
+        act_layer: Callable = nnx.relu,
+        norm_layer: Callable = nnx.BatchNorm,
+        norm_params: dict = {"epsilon": 1e-4},
+        rngs: nnx.Rngs = None,
+    ):
+        self.conv_down = nnx.Sequential([
+            nnx.Conv2d(in_features=in_features,
+                       out_features=hidden_features,
+                       kernel_size=(3, 3),
+                       strides=2,
+                       padding="SAME",
+                       use_bias=False,
+                       rngs=rngs),
+            norm_layer(num_features=hidden_features, **norm_layer),
+            act_layer,
+            nnx.Conv2d(in_features=in_features,
+                       out_features=hidden_features,
+                       kernel_size=(3, 3),
+                       strides=2,
+                       padding="SAME",
+                       use_bias=False,
+                       rngs=rngs),
+            norm_layer(num_features=hidden_features, **norm_layer),
+            act_layer,
+        ])
+
+    def __call__(self, x: jnp.ndarray):
+        return self.conv_down(x)

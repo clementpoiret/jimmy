@@ -87,7 +87,7 @@ class DropPath(nnx.Module):
         # return jax.lax.select(mask, x / keep_prob, jnp.zeros_like(x))
 
 
-class Block(nnx.Module):
+class ViTBlock(nnx.Module):
 
     def __init__(
         self,
@@ -142,5 +142,48 @@ class Block(nnx.Module):
     def __call__(self, x: jnp.ndarray):
         x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
         x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
+
+        return x
+
+
+class ConvBlock(nnx.Module):
+
+    def __init__(
+        self,
+        dim: int,
+        kernel_size=(3, 3),
+        act_layer: Callable = nnx.gelu,
+        norm_layer: Callable = nnx.BatchNorm,
+        norm_params: dict = {"epsilon": 1e-4},
+        drop_path: float = 0.,
+        init_values: Optional[float] = None,
+        rngs: nnx.Rngs = None,
+    ):
+        self.conv1 = nnx.Conv2d(in_features=dim,
+                                out_features=dim,
+                                kernel_size=kernel_size,
+                                strides=1,
+                                padding="SAME",
+                                use_bias=True,
+                                rngs=rngs)
+        self.norm1 = norm_layer(num_features=dim, **norm_layer),
+        self.act = act_layer
+        self.conv2 = nnx.Conv2d(in_features=dim,
+                                out_features=dim,
+                                kernel_size=kernel_size,
+                                strides=1,
+                                padding="SAME",
+                                use_bias=True,
+                                rngs=rngs)
+        self.norm2 = norm_layer(num_features=dim, **norm_layer),
+        self.ls1 = LayerScale(dim, init_values,
+                              rngs=rngs) if init_values else Identity()
+        self.drop_path1 = DropPath(drop_path,
+                                   rngs=rngs) if drop_path > 0. else Identity()
+
+    def __call__(self, x: jnp.ndarray):
+        x2 = self.act(self.norm1(self.conv1(x)))
+        x2 = self.ls1(self.norm2(self.conv2(x2)))
+        x = x + self.drop_path1(x2)
 
         return x
