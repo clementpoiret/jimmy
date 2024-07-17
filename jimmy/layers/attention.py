@@ -3,6 +3,23 @@ from flax import nnx
 
 
 class Attention(nnx.Module):
+    """
+    Multi-head Attention module.
+
+    This module implements multi-head attention mechanism as described in
+    "Attention Is All You Need" (Vaswani et al., 2017).
+
+    Args:
+        dim (int): The input and output dimension of the module.
+        num_heads (int, optional): Number of attention heads. Defaults to 8.
+        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value projections. Defaults to True.
+        proj_bias (bool, optional): If True, add a learnable bias to output projection. Defaults to True.
+        qk_norm (bool, optional): If True, apply layer normalization to query and key. Defaults to False.
+        attn_drop (float, optional): Dropout rate for attention weights. Defaults to 0.
+        proj_drop (float, optional): Dropout rate for output projection. Defaults to 0.
+        norm_layer (nnx.Module, optional): Normalization layer to use. Defaults to nnx.LayerNorm.
+        rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
+    """
 
     def __init__(
         self,
@@ -30,6 +47,19 @@ class Attention(nnx.Module):
         self.k_norm = norm_layer(self.head_dim, rngs=rngs) if qk_norm else None
 
     def __call__(self, x: jnp.ndarray):
+        """
+        Forward pass of the attention module.
+
+        Args:
+            x (jnp.ndarray): Input tensor of shape (B, N, C) where B is batch size,
+                             N is sequence length, and C is input dimension.
+
+        Returns:
+            jnp.ndarray: Output tensor of shape (B, N, C).
+
+        Raises:
+            AssertionError: If input embedding dimension doesn't match layer embedding dimension.
+        """
         B, N, C = x.shape
         assert (
             C == self.dim
@@ -43,7 +73,7 @@ class Attention(nnx.Module):
         if self.qk_norm:
             q, k = self.q_norm(q), self.k_norm(k)
 
-        # TODO: fused attention
+        # TODO: implement fused attention for better performance
         attn = q @ k.transpose((0, 1, 3, 2)) / jnp.sqrt(self.head_dim)
         attn = nnx.softmax(attn, axis=-1)
         attn = self.attn_drop(attn)

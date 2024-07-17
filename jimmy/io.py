@@ -27,6 +27,20 @@ def save(
     overwrite: bool = False,
     compress: bool = True,
 ) -> Path:
+    """
+    Save model parameters and specifications.
+
+    Args:
+        params (nnx.State): Model parameters to save.
+        specifications (Dict): Model specifications to save.
+        name (str): Name of the model.
+        model_dir (Optional[str], optional): Directory to save the model. Defaults to None.
+        overwrite (bool, optional): Whether to overwrite existing files. Defaults to False.
+        compress (bool, optional): Whether to compress the saved files. Defaults to True.
+
+    Returns:
+        Path: Path to the saved model.
+    """
     model_dir = Path(model_dir) if model_dir else DEFAULT_MODEL_DIR
     ckpt_dir = model_dir / name
     compressed_ckpt = model_dir / f"{name}.jim"
@@ -60,12 +74,27 @@ def save(
     return ckpt_dir
 
 
-# TODO: TEST ALL CASES
 def load(name: str,
          params: nnx.State,
          specifications: Dict,
          url: Optional[str] = None,
          model_dir: Optional[str] = None):
+    """
+    Load model parameters and specifications.
+
+    Args:
+        name (str): Name of the model to load.
+        params (nnx.State): Initial model parameters structure.
+        specifications (Dict): Model specifications.
+        url (Optional[str], optional): URL to download the model from. Defaults to None.
+        model_dir (Optional[str], optional): Directory to load the model from. Defaults to None.
+
+    Returns:
+        Dict: Loaded model parameters and specifications.
+
+    Raises:
+        ValueError: If the model is not found and no URL is provided.
+    """
     model_dir = Path(model_dir) if model_dir else DEFAULT_MODEL_DIR
     model_dir.mkdir(exist_ok=True, parents=True)
     ckpt_dir = model_dir / name

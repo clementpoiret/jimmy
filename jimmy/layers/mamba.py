@@ -13,12 +13,12 @@ def custom_uniform(scale, dtype=jnp.float_):
     """Builds an initializer that returns real uniformly-distributed random arrays.
 
     Args:
-        scale: optional; the upper bound of the random distribution.
-        dtype: optional; the initializer's default dtype.
+        scale (float): The upper bound of the random distribution.
+        dtype (jnp.dtype, optional): The initializer's default dtype. Defaults to jnp.float_.
 
     Returns:
-        An initializer that returns arrays whose values are uniformly distributed in
-        the range ``(-scale, scale)``.
+        Callable: An initializer function that returns arrays whose values are uniformly
+                  distributed in the range ``(-scale, scale)``.
     """
 
     def init(key, shape, dtype=dtype):
@@ -29,15 +29,14 @@ def custom_uniform(scale, dtype=jnp.float_):
 
 
 def custom_tensor(tensor, dtype=jnp.float_):
-    """Builds an initializer that returns real uniformly-distributed random arrays.
+    """Builds an initializer that returns a predefined tensor.
 
     Args:
-        scale: optional; the upper bound of the random distribution.
-        dtype: optional; the initializer's default dtype.
+        tensor (jnp.ndarray): The tensor to be returned by the initializer.
+        dtype (jnp.dtype, optional): The initializer's default dtype. Defaults to jnp.float_.
 
     Returns:
-        An initializer that returns arrays whose values are uniformly distributed in
-        the range ``(-scale, scale)``.
+        Callable: An initializer function that returns the predefined tensor.
     """
 
     def init():
@@ -49,15 +48,49 @@ def custom_tensor(tensor, dtype=jnp.float_):
 class MambaVisionMixer(nnx.Module):
     """MambaVision Mixer from Ali Hatamizadeh and Jan Kautz.
 
-    Definitions:
-        - b: batch size (`B` in [1]),
-        - l: sequence length (`L` in [1]),
-        - d and d_model: hidden dim,
-        - n and d_state: latent space dim (`N` in [1]),
-        - expand: expansion factor (`E` in [1]),
-        - d_in and d_inner: d*expand (`D` in [1]),
-        - A, B, C, D: state space parameters (See any state space representation formula),
-        - dt or delta: input-dependent step size.
+    This class implements the MambaVision Mixer, a novel architecture for vision tasks.
+
+    Attributes:
+        d_model (int): Hidden dimension size.
+        d_state (int): Latent space dimension size.
+        d_conv (int): Convolution dimension size.
+        expand (int): Expansion factor.
+        d_inner (int): Inner dimension size (d_model * expand).
+        dt_rank (int): Rank for delta time projection.
+        use_fast_path (bool): Whether to use the fast path computation.
+        layer_idx (int | None): Layer index, if applicable.
+
+    Args:
+        d_model (int): Hidden dimension size.
+        d_state (int, optional): Latent space dimension size. Defaults to 16.
+        d_conv (int, optional): Convolution dimension size. Defaults to 4.
+        expand (int, optional): Expansion factor. Defaults to 2.
+        dt_rank (str, optional): Rank for delta time projection. Defaults to "auto".
+        dt_min (float, optional): Minimum delta time value. Defaults to 0.001.
+        dt_max (float, optional): Maximum delta time value. Defaults to 0.1.
+        dt_init (str, optional): Initialization method for delta time. Defaults to "random".
+        dt_scale (float, optional): Scaling factor for delta time. Defaults to 1.0.
+        dt_init_floor (float, optional): Floor value for delta time initialization. Defaults to 1e-4.
+        conv_bias (bool, optional): Whether to use bias in convolutions. Defaults to True.
+        bias (bool, optional): Whether to use bias in linear layers. Defaults to False.
+        use_fast_path (bool, optional): Whether to use the fast path computation. Defaults to True.
+        layer_idx (int | None, optional): Layer index, if applicable. Defaults to None.
+        rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
+
+    Notes:
+        - b: batch size                       (`B` in Mamba paper [1] Algorithm 2)
+        - l: sequence length                  (`L` in [1] Algorithm 2)
+        - d or d_model: hidden dim
+        - n or d_state: latent state dim      (`N` in [1] Algorithm 2)
+        - expand: expansion factor            (`E` in [1] Section 3.4)
+        - d_in or d_inner: d * expand         (`D` in [1] Algorithm 2)
+        - A, B, C, D: state space parameters  (See any state space representation formula)
+            (B, C are input-dependent (aka selective, a key innovation in Mamba); A, D are not)
+        - dt or delta: input-dependent step size
+        - dt_rank: rank of dt                 (See [1] Section 3.6 "Parameterization of ∆")
+
+    References:
+        [1] Mamba: Linear-Time Sequence Modeling with Selective State Spaces
     """
 
     def __init__(
@@ -149,22 +182,30 @@ class MambaVisionMixer(nnx.Module):
                                  rngs=rngs)
 
     def __call__(self, x: jnp.ndarray):
+        """Forward pass of the MambaVisionMixer.
+
+        Args:
+            x (jnp.ndarray): Input tensor of shape (batch_size, sequence_length, d_model).
+
+        Returns:
+            jnp.ndarray: Output tensor of shape (batch_size, sequence_length, d_model).
+        """
         _, L, _ = x.shape
 
-        xz = self.in_proj(x)  # 1,64, 32
-        x, z = jnp.split(xz, 2, axis=-1)  # 1, 64, 16 x2
-        A = -jnp.exp(self.A_log.value())  # 16, 16
-        x = nnx.silu(self.conv1d_x(x))  # 1, 64, 16
-        z = nnx.silu(self.conv1d_z(z))  # 1, 64, 16
-        x_dbl = self.x_proj(rearrange(x, "b l d -> (b l) d"))  # 64, 33
+        xz = self.in_proj(x)
+        x, z = jnp.split(xz, 2, axis=-1)
+        A = -jnp.exp(self.A_log.value())
+        x = nnx.silu(self.conv1d_x(x))
+        z = nnx.silu(self.conv1d_z(z))
+        x_dbl = self.x_proj(rearrange(x, "b l d -> (b l) d"))
         dt, B, C = jnp.split(x_dbl, [self.dt_rank, self.d_state + self.dt_rank],
-                             axis=-1)  # 64, 1; 64, 16; 64, 16
-        dt = rearrange(self.dt_proj(dt), "(b l) d -> b d l", l=L)  # 1, 16, 64
-        B = rearrange(B, "(b l) d -> b d l", l=L)  # 1, 16, 64
-        C = rearrange(C, "(b l) d -> b d l", l=L)  # 1, 16, 64
+                             axis=-1)
+        dt = rearrange(self.dt_proj(dt), "(b l) d -> b d l", l=L)
+        B = rearrange(B, "(b l) d -> b d l", l=L)
+        C = rearrange(C, "(b l) d -> b d l", l=L)
 
-        x = rearrange(x, "b l d -> b d l")  # 1, 16, 64
-        z = rearrange(z, "b l d -> b d l")  # 1, 16, 64
+        x = rearrange(x, "b l d -> b d l")
+        z = rearrange(z, "b l d -> b d l")
         y = selective_scan(x,
                            dt,
                            A,
@@ -172,11 +213,11 @@ class MambaVisionMixer(nnx.Module):
                            C,
                            self.D.value,
                            delta_bias=self.dt_proj.bias.value,
-                           delta_softplus=True)  # 1, 16, 64
+                           delta_softplus=True)
 
-        y = jnp.concatenate([y, z], axis=1)  # 1, 32, 64
-        y = rearrange(y, "b d l -> b l d")  # 1, 64, 32
+        y = jnp.concatenate([y, z], axis=1)
+        y = rearrange(y, "b d l -> b l d")
 
-        out = self.out_proj(y)  # 1, 64, 16
+        out = self.out_proj(y)
 
         return out

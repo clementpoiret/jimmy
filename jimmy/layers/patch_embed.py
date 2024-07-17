@@ -1,5 +1,5 @@
-from typing import Callable, List, Optional, Tuple, Union
 import math
+from typing import Callable, List, Optional, Tuple, Union
 
 import jax.numpy as jnp
 from flax import nnx
@@ -72,7 +72,6 @@ class PatchEmbed(nnx.Module):
     def dynamic_feat_size(self, img_size: Tuple[int, int]) -> Tuple[int, int]:
         """
         Get grid (feature) size for given image size taking account of dynamic padding.
-        NOTE: must be torchscript compatible so using fixed tuple indexing
         Taken as is from timm
 
         Args:

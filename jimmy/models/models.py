@@ -132,7 +132,15 @@ DINOV2_VITG14_REG = {
 
 
 def parse_cfg(config: dict) -> dict:
-    """Replace module names by the real modules"""
+    """
+    Replace module names with their corresponding implementations.
+
+    Args:
+        config (dict): The configuration dictionary.
+
+    Returns:
+        dict: The updated configuration dictionary with module implementations.
+    """
     for key, value in config.items():
         match value:
             case "mlp":
@@ -144,12 +152,27 @@ def parse_cfg(config: dict) -> dict:
     return config
 
 
-# TODO: pretrained arg
 def load_model(specifications: dict,
                rngs: nnx.Rngs,
                url: Optional[str] = None,
                pretrained: bool = True,
                **kwargs) -> nnx.Module:
+    """
+    Load a model based on the given specifications.
+
+    Args:
+        specifications (dict): A dictionary containing model specifications.
+        rngs (nnx.Rngs): Random number generators.
+        url (Optional[str], optional): URL to download pretrained weights. Defaults to None.
+        pretrained (bool, optional): Whether to load pretrained weights. Defaults to True.
+        **kwargs: Additional keyword arguments to pass to the model constructor.
+
+    Returns:
+        nnx.Module: The loaded model.
+
+    Raises:
+        NotImplementedError: If the specified model class is not implemented.
+    """
     cls = specifications["class"]
     config = specifications["config"] | kwargs
     config = parse_cfg(config)

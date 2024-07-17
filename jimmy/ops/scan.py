@@ -14,34 +14,37 @@ def selective_scan(u: jnp.ndarray,
                    D: jnp.ndarray,
                    delta_bias: jnp.ndarray | None = None,
                    delta_softplus: bool = False):
-    """Does selective scan algorithm. See:
-        - Section 2 State Space Models in the Mamba paper [1]
-        - Algorithm 2 in Section 3.2 in the Mamba paper [1]
-        - run_SSM(A, B, C, u) in The Annotated S4 [2]
+    """
+    Performs the selective scan algorithm as described in the Mamba paper.
 
-    This is the classic discrete state space formula:
+    This function implements the classic discrete state space formula:
         x(t + 1) = Ax(t) + Bu(t)
         y(t)     = Cx(t) + Du(t)
-    except B and C (and the step size delta, which is used for discretization)
+    where B and C (and the step size delta, which is used for discretization)
     are dependent on the input x(t).
 
-    Definitions:
-        - b: batch size (`B` in [1]),
-        - l: sequence length (`L` in [1]),
-        - d and d_model: hidden dim,
-        - n and d_state: latent space dim (`N` in [1]),
-        - dt or delta: input-dependent step size.
-
     Args:
-        u: shape (b, d, l)
-        delta: shape (b, d, l)
-        A: shape (d, n)
-        B: shape (b, n, l)
-        C: shape (b, n, l)
-        D: shape (d,)
+        u (jnp.ndarray): Input tensor of shape (b, d, l).
+        delta (jnp.ndarray): Step size tensor of shape (b, d, l).
+        A (jnp.ndarray): State transition matrix of shape (d, n).
+        B (jnp.ndarray): Input matrix of shape (b, n, l).
+        C (jnp.ndarray): Output matrix of shape (b, n, l).
+        D (jnp.ndarray): Direct feedthrough matrix of shape (d,).
+        delta_bias (jnp.ndarray | None, optional): Bias for delta. Defaults to None.
+        delta_softplus (bool, optional): Whether to apply softplus to delta. Defaults to False.
 
     Returns:
-        output: shape (b, d, l)
+        jnp.ndarray: Output tensor of shape (b, d, l).
+
+    References:
+        [1] Mamba: Linear-Time Sequence Modeling with Selective State Spaces
+        [2] The Annotated S4: run_SSM(A, B, C, u)
+
+    Notes:
+        - b: batch size
+        - l: sequence length
+        - d: hidden dimension
+        - n: latent space dimension
 
     Official Implementation:
         selective_scan_ref(), https://github.com/state-spaces/mamba/blob/main/mamba_ssm/ops/selective_scan_interface.py#L86

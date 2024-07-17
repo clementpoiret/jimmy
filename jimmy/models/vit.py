@@ -15,6 +15,42 @@ from jimmy.layers.patch_embed import PatchEmbed
 
 
 class DinoV2(nnx.Module):
+    """
+    Implementation of the DinoV2 (Vision Transformer) model.
+
+    This class implements the DinoV2 architecture, which is a variant of the Vision Transformer
+    designed for self-supervised learning tasks.
+
+    Args:
+        img_size (int): Size of the input image (assumed to be square).
+        in_channels (int): Number of input channels.
+        patch_size (int): Size of the patches to be extracted from the input image.
+        embed_dim (int): Dimensionality of the token embeddings.
+        depth (int): Number of transformer blocks.
+        num_heads (int): Number of attention heads.
+        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
+        qkv_bias (bool): If True, add a learnable bias to query, key, value.
+        qk_norm (bool): If True, normalize the query and key.
+        ffn_bias (bool): If True, use bias in the feed-forward network.
+        proj_bias (bool): If True, use bias in the projection layers.
+        drop_path_rate (float):  Stochastic depth rate.
+        drop_path_uniform (bool): If True, use a uniform drop rate across layers.
+        class_token (bool): If True, add a class token.
+        reg_tokens (int): Number of register tokens to use.
+        pos_embed (str): Type of positional embedding to use.
+        no_embed_class (bool): If True, don't add positional embedding to class token.
+        pos_embed_reg_tokens (bool): If True, add positional embedding to register tokens.
+        dynamic_img_size (bool): If True, allow dynamic image sizes.
+        dynamic_img_pad (bool): If True, use dynamic padding for images.
+        embed_layer (nnx.Module): Module to use for patch embedding.
+        act_layer (Callable): Activation function to use.
+        block (nnx.Module): Module to use for transformer blocks.
+        attention (nnx.Module): Module to use for attention mechanism.
+        ffn_layer (nnx.Module): Module to use for feed-forward network.
+        init_values (float | None): Initial value for layer scale.
+        interpolate_antialias (bool): If True, use antialiasing when interpolating.
+        rngs (nnx.Rngs): Random number generators.
+    """
 
     def __init__(
         self,
@@ -139,6 +175,19 @@ class DinoV2(nnx.Module):
         interpolation: str = "bicubic",
         antialias: bool = True,
     ):
+        """
+        Resample the positional embeddings to a new size.
+
+        Args:
+            pos_embed (jnp.ndarray): The current positional embeddings.
+            new_size (Tuple[int]): The new size to resample to.
+            old_size (Tuple[int], optional): The old size of the positional embeddings.
+            interpolation (str, optional): The interpolation method to use. Defaults to "bicubic".
+            antialias (bool, optional): Whether to use antialiasing. Defaults to True.
+
+        Returns:
+            jnp.ndarray: The resampled positional embeddings.
+        """
         previous_dtype = pos_embed.value.dtype
 
         num_new_tokens = new_size[0] * new_size[
@@ -161,18 +210,29 @@ class DinoV2(nnx.Module):
 
         pos_embed = jax.image.resize(
             pos_embed,
-            (1, h0, w0, dim),
+            (1, new_size[0], new_size[1], self.embed_dim),
             method=interpolation,
             antialias=antialias,
         )
-        pos_embed = pos_embed.reshape(1, -1, embed_dim).astype(previous_dtype)
+        pos_embed = pos_embed.reshape(1, -1, self.embed_dim).astype(previous_dtype)
 
         if prefix_embed is not None:
-            pro_embed = jnp.concatenate(prefix_embed + [pos_embed], axis=1)
+            pos_embed = jnp.concatenate([prefix_embed, pos_embed], axis=1)
 
         return pos_embed
 
     def _pos_embed(self, x: jnp.ndarray, h: int, w: int):
+        """
+        Apply positional embedding to the input.
+
+        Args:
+            x (jnp.ndarray): The input tensor.
+            h (int): Height of the input.
+            w (int): Width of the input.
+
+        Returns:
+            jnp.ndarray: The input with positional embeddings applied.
+        """
         if self.pos_embed is None:
             return jnp.reshape(x, (x.shape[0], -1, x.shape[-1]))
 
@@ -194,7 +254,6 @@ class DinoV2(nnx.Module):
                 cls_token_value, (x.shape[0], 1, cls_token_value.shape[-1]))
             to_cat.append(expanded_cls_token)
 
-        # TODO: review cat orders, and pos_embed on x without reg tokens
         if self.register_tokens is not None:
             register_tokens_value = self.register_tokens.value
             expanded_register_tokens = jnp.broadcast_to(
@@ -207,13 +266,10 @@ class DinoV2(nnx.Module):
             if to_cat:
                 x = jnp.concatenate(to_cat + [x], axis=1)
         elif self.pos_embed_reg_tokens:
-            # Timm impl.
             if to_cat:
                 x = jnp.concatenate(to_cat + [x], axis=1)
             x = x + pos_embed
         else:
-            # Similar to original dinov2 impl.
-            # https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
             x = jnp.concatenate(to_cat[:1] + [x], axis=1)
             x = x + pos_embed
             if self.register_tokens is not None:
@@ -222,6 +278,15 @@ class DinoV2(nnx.Module):
         return x
 
     def features(self, x):
+        """
+        Extract features from the input.
+
+        Args:
+            x (jnp.ndarray): The input tensor.
+
+        Returns:
+            jnp.ndarray: The extracted features.
+        """
         N, H, W, C = x.shape
 
         x = self.patch_embed(x)
@@ -234,6 +299,15 @@ class DinoV2(nnx.Module):
         return x
 
     def forward_features(self, x):
+        """
+        Forward pass to extract features and apply normalization.
+
+        Args:
+            x (jnp.ndarray): The input tensor.
+
+        Returns:
+            dict: A dictionary containing different components of the forward pass.
+        """
         x = self.features(x)
         x_norm = self.norm(x)
 
@@ -245,6 +319,15 @@ class DinoV2(nnx.Module):
         }
 
     def __call__(self, x: jnp.ndarray):
+        """
+        Forward pass of the DinoV2 model.
+
+        Args:
+            x (jnp.ndarray): The input tensor.
+
+        Returns:
+            jnp.ndarray: The output of the model.
+        """
         x = self.features(x)
         x = self.norm(x)
         x = self.head(x)

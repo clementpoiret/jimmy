@@ -124,7 +124,7 @@ class DropPath(nnx.Module):
         shape = (x.shape[0],) + (1,) * (x.ndim - 1)
         random_tensor = jax.random.bernoulli(rng, p=keep_prob, shape=shape)
 
-        if keep_prob > 0.0 and scale_by_keep:
+        if keep_prob > 0.0 and self.scale_by_keep:
             random_tensor /= keep_prob
 
         return x * random_tensor
