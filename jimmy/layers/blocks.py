@@ -5,9 +5,7 @@ import jax.numpy as jnp
 from flax import nnx
 from flax.nnx.nnx.module import first_from
 
-from jimmy.layers.attention import Attention
-from jimmy.layers.mamba import MambaVisionMixer
-from jimmy.layers.mlp import Mlp
+from jimmy.layers import Attention, Mlp
 
 
 class Identity(nnx.Module):
@@ -192,7 +190,7 @@ class Block(nnx.Module):
                     rngs=rngs,
                 )
             case "mambavisionmixer":
-                self.attn = MambaVisionMixer(
+                self.attn = attention(
                     d_model=dim,
                     d_state=8,
                     d_conv=3,

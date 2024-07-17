@@ -349,7 +349,8 @@ class MambaVisionLayer(nnx.Module):
                  drop_path: float | list = 0.,
                  init_values: float | None = None,
                  init_values_conv: float | None = None,
-                 attention: Callable = Attention,
+                 transformer_attention: Callable = Attention,
+                 mamba_mixer=MambaVisionMixer,
                  act_layer: Callable = nnx.gelu,
                  norm_layer: Callable = nnx.LayerNorm,
                  ffn_layer: Callable = Mlp,
@@ -384,7 +385,8 @@ class MambaVisionLayer(nnx.Module):
                     init_values=init_values,
                     drop_path=drop_path[i]
                     if isinstance(drop_path, list) else drop_path,
-                    attention=attention,
+                    attention=transformer_attention
+                    if block_type == "attention" else mamba_mixer,
                     act_layer=act_layer,
                     norm_layer=norm_layer,
                     ffn_layer=ffn_layer,
