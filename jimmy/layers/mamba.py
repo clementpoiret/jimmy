@@ -6,7 +6,54 @@ from einops import rearrange
 from flax import nnx
 from jax import dtypes, random
 
+from jimmy.layers.attention import Attention
+from jimmy.layers.blocks import Block, ConvBlock
+from jimmy.layers.mlp import Mlp
 from jimmy.ops.scan import selective_scan
+
+
+def window_partition(x: jnp.ndarray, window_size: int) -> jnp.ndarray:
+    """Partition the input tensor into non-overlapping windows.
+
+    Args:
+        x: Input tensor of shape (B, H, W, C) in NHWC format.
+        window_size: Size of each square window.
+
+    Returns:
+        Tensor of shape (num_windows*B, window_size*window_size, C) containing local window features.
+
+    Note:
+        This function assumes that both H and W are divisible by window_size.
+    """
+    return rearrange(x,
+                     'b (h w1) (w w2) c -> (b h w) (w1 w2) c',
+                     w1=window_size,
+                     w2=window_size)
+
+
+def window_reverse(windows: jnp.ndarray, window_size: int, H: int,
+                   W: int) -> jnp.ndarray:
+    """Reverse the window partitioning process.
+
+    Args:
+        windows: Tensor of shape (num_windows*B, window_size*window_size, C) containing local window features.
+        window_size: Size of each square window.
+        H: Height of the original image.
+        W: Width of the original image.
+
+    Returns:
+        Tensor of shape (B, H, W, C) in NHWC format.
+
+    Note:
+        This function assumes that both H and W are divisible by window_size.
+    """
+    B = windows.shape[0] // ((H // window_size) * (W // window_size))
+    return rearrange(windows,
+                     '(b h w) (w1 w2) c -> b (h w1) (w w2) c',
+                     h=H // window_size,
+                     w=W // window_size,
+                     w1=window_size,
+                     w2=window_size)
 
 
 def custom_uniform(scale, dtype=jnp.float_):
@@ -43,6 +90,30 @@ def custom_tensor(tensor, dtype=jnp.float_):
         return tensor
 
     return init
+
+
+class Downsample(nnx.Module):
+    """Downsampling block."""
+
+    def __init__(self, dim: int, keep_dim: bool = False, rngs: nnx.Rngs = None):
+        """Initialize the Block.
+
+        Args:
+            dim (int): Input dimension.
+            keep_dim (bool): If True, maintain the resolution.
+            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
+        """
+        dim_out = dim if keep_dim else 2 * dim
+        self.reduction = nnx.Conv(in_features=dim,
+                                  out_features=dim_out,
+                                  kernel_size=(3, 3),
+                                  strides=(2, 2),
+                                  padding="SAME",
+                                  use_bias=False,
+                                  rngs=rngs)
+
+    def __call__(self, x: jnp.ndarray):
+        return self.reduction(x)
 
 
 class MambaVisionMixer(nnx.Module):
@@ -221,3 +292,96 @@ class MambaVisionMixer(nnx.Module):
         out = self.out_proj(y)
 
         return out
+
+
+class MambaVisionLayer(nnx.Module):
+    """Base layer of MambaVision"""
+
+    def __init__(self,
+                 dim: int,
+                 depth: int,
+                 num_heads: int,
+                 window_size,
+                 conv: bool = False,
+                 downsample: bool = True,
+                 mlp_ratio: float = 4.,
+                 qkv_bias: bool = True,
+                 qk_norm: bool = False,
+                 ffn_bias: bool = True,
+                 proj_bias: bool = True,
+                 proj_drop: float = 0.,
+                 attn_drop: float = 0.,
+                 drop_path: float | list = 0.,
+                 init_values: float | None = None,
+                 init_values_conv: float | None = None,
+                 attention: Callable = Attention,
+                 act_layer: Callable = nnx.gelu,
+                 norm_layer: Callable = nnx.LayerNorm,
+                 ffn_layer: Callable = Mlp,
+                 transformer_blocks: list = []):
+        self.conv = conv
+
+        if conv:
+            self.blocks = [
+                ConvBlock(
+                    dim=dim,
+                    drop_path=drop_path[i]
+                    if isinstance(drop_path, list) else drop_path,
+                    init_values=init_values_conv,
+                    rngs=rngs,
+                ) for i in range(depth)
+            ]
+            self.transformer_block = False
+        else:
+            self.blocks = [
+                Block(
+                    dim=dim,
+                    block_type=block_type,
+                    num_heads=num_heads,
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    qk_norm=qk_norm,
+                    ffn_bias=ffn_bias,
+                    proj_bias=proj_bias,
+                    proj_drop=proj_drop,
+                    attn_drop=attn_drop,
+                    init_values=init_values,
+                    drop_path=drop_path[i]
+                    if isinstance(drop_path, list) else drop_path,
+                    attention=attention,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    ffn_layer=mlp,
+                    rngs=rngs,
+                ) for i, block_type in enumerate(transformer_blocks)
+            ]
+            self.transformer_block = True
+
+        self.downsample = None if not downsample else Downsample(dim=dim)
+        self.do_gt = False
+        self.window_size = window_size
+
+    def __call__(self, x: jnp.ndarray):
+        _, H, W, _ = x.shape
+        if self.transfomer_block:
+            pad_r = (self.window_size - W % self.window_size) % self.window_size
+            pad_b = (self.window_size - H % self.window_size) % self.window_size
+            if pad_r > 0 or pad_b > 0:
+                x = jnp.pad(x, ((0, 0), (0, pad_b), (0, pad_r), (0, 0)))
+                _, Hp, Wp, _ = x.shape
+            else:
+                Hp, Wp = H, W
+            x = window_partition(x, self.window_size)
+
+        for blk in self.blocks:
+            x = blk(x)
+
+        if self.transformer_block:
+            x = window_reverse(x, self.window_reverse, Hp, Wp)
+            if pad_r > 0 or pad_b > 0:
+                x = x[:, :H, :W, :]
+
+        if self.downsample is not None:
+            x = self.downsample(x)
+
+        return x
