@@ -1,5 +1,7 @@
 version = 1
 
+exclude_patterns = ["__init__.py"]
+
 [[analyzers]]
 name = "python"
 
@@ -7,7 +9,7 @@ name = "python"
   runtime_version = "3.x.x"
 
 [[transformers]]
-name = "yapf"
+name = "isort"
 
 [[transformers]]
-name = "isort"
+name = "yapf"
