@@ -43,7 +43,8 @@ def convert_params_from_torch_hub(
     # Load the pytorch model from torch hub
     torch_model = torch.hub.load(*torch_hub_cfg)
     torch_params = {
-        path: param for path, param in torch_model.named_parameters()
+        path: param
+        for path, param in torch_model.named_parameters()
     }
 
     # Extract the parameters from the defined Jax model
