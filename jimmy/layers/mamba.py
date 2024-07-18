@@ -397,7 +397,8 @@ class MambaVisionLayer(nnx.Module):
             ]
             self.transformer_block = True
 
-        self.downsample = None if not downsample else Downsample(dim=dim)
+        self.downsample = None if not downsample else Downsample(dim=dim,
+                                                                 rngs=rngs)
         self.do_gt = False
         self.window_size = window_size
 

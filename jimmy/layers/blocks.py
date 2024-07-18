@@ -147,7 +147,7 @@ class Block(nnx.Module):
         proj_drop: float = 0.,
         attn_drop: float = 0.,
         init_values: Optional[float] = None,
-        drop_path: float = 0.,
+        drop_path: float | list = 0.,
         attention: nnx.Module = Attention,
         act_layer: Callable = nnx.gelu,
         norm_layer: nnx.Module = nnx.LayerNorm,
@@ -168,7 +168,7 @@ class Block(nnx.Module):
             proj_drop (float, optional): Dropout rate of the projection. Defaults to 0.
             attn_drop (float, optional): Dropout rate of the attention. Defaults to 0.
             init_values (Optional[float], optional): Initial value for LayerScale. Defaults to None.
-            drop_path (float, optional): Stochastic depth rate. Defaults to 0.
+            drop_path (float | list, optional): Stochastic depth rate. Defaults to 0.
             attention (nnx.Module, optional): Attention module. Defaults to Attention.
             act_layer (Callable, optional): Activation function. Defaults to nnx.gelu.
             norm_layer (nnx.Module, optional): Normalization layer. Defaults to nnx.LayerNorm.
@@ -203,10 +203,18 @@ class Block(nnx.Module):
                     f"block_type `{block_type}` undefined. Should be one of [`attention`, `mambavisionmixer`]"
                 )
 
+        if isinstance(drop_path, list):
+            if len(drop_path) != 2:
+                raise AssertionError(
+                    f"`drop_path` needs to have 2 elements, got {len(drop_path)}."
+                )
+            dr1, dr2 = drop_path
+        else:
+            dr1 = dr2 = drop_path
+
         self.ls1 = LayerScale(dim, init_values,
                               rngs=rngs) if init_values else Identity()
-        self.drop_path1 = DropPath(drop_path,
-                                   rngs=rngs) if drop_path > 0. else Identity()
+        self.drop_path1 = DropPath(dr1, rngs=rngs) if dr1 > 0. else Identity()
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
         self.mlp = ffn_layer(
@@ -219,8 +227,7 @@ class Block(nnx.Module):
         )
         self.ls2 = LayerScale(dim, init_values,
                               rngs=rngs) if init_values else Identity()
-        self.drop_path2 = DropPath(drop_path,
-                                   rngs=rngs) if drop_path > 0. else Identity()
+        self.drop_path2 = DropPath(dr2, rngs=rngs) if dr2 > 0. else Identity()
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
@@ -263,23 +270,23 @@ class ConvBlock(nnx.Module):
             init_values (Optional[float], optional): Initial value for LayerScale. Defaults to None.
             rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
         """
-        self.conv1 = nnx.Conv2d(in_features=dim,
-                                out_features=dim,
-                                kernel_size=kernel_size,
-                                strides=1,
-                                padding="SAME",
-                                use_bias=True,
-                                rngs=rngs)
-        self.norm1 = norm_layer(num_features=dim, **norm_params)
+        self.conv1 = nnx.Conv(in_features=dim,
+                              out_features=dim,
+                              kernel_size=kernel_size,
+                              strides=1,
+                              padding="SAME",
+                              use_bias=True,
+                              rngs=rngs)
+        self.norm1 = norm_layer(num_features=dim, rngs=rngs, **norm_params)
         self.act = act_layer
-        self.conv2 = nnx.Conv2d(in_features=dim,
-                                out_features=dim,
-                                kernel_size=kernel_size,
-                                strides=1,
-                                padding="SAME",
-                                use_bias=True,
-                                rngs=rngs)
-        self.norm2 = norm_layer(num_features=dim, **norm_params)
+        self.conv2 = nnx.Conv(in_features=dim,
+                              out_features=dim,
+                              kernel_size=kernel_size,
+                              strides=1,
+                              padding="SAME",
+                              use_bias=True,
+                              rngs=rngs)
+        self.norm2 = norm_layer(num_features=dim, rngs=rngs, **norm_params)
         self.ls1 = LayerScale(dim, init_values,
                               rngs=rngs) if init_values else Identity()
         self.drop_path1 = DropPath(drop_path,

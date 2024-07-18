@@ -4,8 +4,8 @@ import jax.numpy as jnp
 from einops import reduce
 from flax import nnx
 
-from jimmy.layers import (Attention, ConvPatchEmbed, Identity,
-                          MambaVisionLayer, MambaVisionMixer, Mlp)
+from jimmy.layers import (Attention, ConvPatchEmbed, Identity, MambaVisionLayer,
+                          MambaVisionMixer, Mlp)
 
 
 def adaptive_avg_pool2d(x: jnp.ndarray):
@@ -86,7 +86,7 @@ class MambaVision(nnx.Module):
                                           hidden_features=in_dim,
                                           out_features=dim,
                                           rngs=rngs)
-        dpr = jnp.linspace(0, drop_path_rate, sum(depths))
+        dpr = list(jnp.linspace(0, drop_path_rate, sum(depths)))
 
         self.levels = []
         for i, item in enumerate(depths):
@@ -121,7 +121,7 @@ class MambaVision(nnx.Module):
         self.head = nnx.Linear(num_features, num_classes,
                                rngs=rngs) if num_classes else Identity()
 
-    def _get_block_types(l: int):
+    def _get_block_types(self, l: int):
         """
         Generate a list of block types for a layer.
 
@@ -135,7 +135,7 @@ class MambaVision(nnx.Module):
         first_half_size = (l + 1) // 2
         second_half_size = l // 2
         return ["mambavisionmixer"] * first_half_size + ["attention"
-                                                         ] * second_half_size
+                                                        ] * second_half_size
 
     def forward_features(self, x: jnp.ndarray):
         """
