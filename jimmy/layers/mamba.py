@@ -6,10 +6,11 @@ from einops import rearrange
 from flax import nnx
 from jax import dtypes, random
 
-from jimmy.layers.attention import Attention
-from jimmy.layers.blocks import Block, ConvBlock
-from jimmy.layers.mlp import Mlp
 from jimmy.ops.scan import selective_scan
+
+from .attention import Attention
+from .blocks import Block, ConvBlock
+from .mlp import Mlp
 
 
 def window_partition(x: jnp.ndarray, window_size: int) -> jnp.ndarray:
@@ -95,10 +96,7 @@ def custom_tensor(tensor, dtype=jnp.float_):
 class Downsample(nnx.Module):
     """Downsampling block."""
 
-    def __init__(self,
-                 dim: int,
-                 keep_dim: bool = False,
-                 rngs: nnx.Rngs = None):
+    def __init__(self, dim: int, keep_dim: bool = False, rngs: nnx.Rngs = None):
         """Initialize the Block.
 
         Args:
@@ -213,7 +211,7 @@ class MambaVisionMixer(nnx.Module):
             raise NotImplementedError
 
         key = rngs.params()
-        rand_vals = random.uniform(key, (self.d_inner // 2, ))
+        rand_vals = random.uniform(key, (self.d_inner // 2,))
         dt = jnp.exp(rand_vals * (math.log(dt_max) - math.log(dt_min)) +
                      math.log(dt_min))
         dt = jnp.clip(dt, a_min=dt_init_floor)
@@ -242,14 +240,14 @@ class MambaVisionMixer(nnx.Module):
 
         self.conv1d_x = nnx.Conv(in_features=self.d_inner // 2,
                                  out_features=self.d_inner // 2,
-                                 kernel_size=(self.d_conv, ),
+                                 kernel_size=(self.d_conv,),
                                  feature_group_count=self.d_inner // 2,
                                  use_bias=conv_bias // 2 > 0,
                                  padding="SAME",
                                  rngs=rngs)
         self.conv1d_z = nnx.Conv(in_features=self.d_inner // 2,
                                  out_features=self.d_inner // 2,
-                                 kernel_size=(self.d_conv, ),
+                                 kernel_size=(self.d_conv,),
                                  feature_group_count=self.d_inner // 2,
                                  use_bias=conv_bias // 2 > 0,
                                  padding="SAME",
@@ -272,8 +270,7 @@ class MambaVisionMixer(nnx.Module):
         x = nnx.silu(self.conv1d_x(x))
         z = nnx.silu(self.conv1d_z(z))
         x_dbl = self.x_proj(rearrange(x, "b l d -> (b l) d"))
-        dt, B, C = jnp.split(x_dbl,
-                             [self.dt_rank, self.d_state + self.dt_rank],
+        dt, B, C = jnp.split(x_dbl, [self.dt_rank, self.d_state + self.dt_rank],
                              axis=-1)
         dt = rearrange(self.dt_proj(dt), "(b l) d -> b d l", l=L)
         B = rearrange(B, "(b l) d -> b d l", l=L)
@@ -407,10 +404,8 @@ class MambaVisionLayer(nnx.Module):
     def __call__(self, x: jnp.ndarray):
         _, H, W, _ = x.shape
         if self.transfomer_block:
-            pad_r = (self.window_size -
-                     W % self.window_size) % self.window_size
-            pad_b = (self.window_size -
-                     H % self.window_size) % self.window_size
+            pad_r = (self.window_size - W % self.window_size) % self.window_size
+            pad_b = (self.window_size - H % self.window_size) % self.window_size
             if pad_r > 0 or pad_b > 0:
                 x = jnp.pad(x, ((0, 0), (0, pad_b), (0, pad_r), (0, 0)))
                 _, Hp, Wp, _ = x.shape

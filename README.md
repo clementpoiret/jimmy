@@ -1,8 +1,117 @@
 # Jimmy
 
+Jimmy is a Jax-based library that provides implement computer vision models. It's designed to be flexible, efficient, and easy to use for researchers and practitioners in the field of deep learning.
+
+> [!WARNING] Jimmy is not yet ready for production use.
+> It is a work in progress, intended for experimentations.
+
+## Features
+
+- Implementation of DinoV2 (Vision Transformer) models
+- Implementation of MambaVision models
+- Support for loading pre-trained weights from PyTorch models (DinoV2 only)
+- Flexible model configuration and customization
+- Efficient Jax-based computations
+
+## Installation
+
+**NOT YET AVAILABLE**
+
+## Quick Start
+
+Here's a quick example of how to use Jimmy to load a pre-trained DinoV2 model:
+
+```python
+import jax
+import jax.numpy as jnp
+from flax import nnx
+
+from jimmy.models import DINOV2_VITS14, load_model
+
+# Initialize random number generator
+rngs = nnx.Rngs(42)
+
+# Load the model
+model = load_model(
+    DINOV2_VITS14,
+    rngs=rngs,
+    pretrained=True,
+    url=
+    "https://huggingface.co/poiretclement/dinov2_jax/resolve/main/dinov2_vits14.jim",
+)
+
+# Create a random input
+key = rngs.params()
+x = jax.random.normal(key, (1, 518, 518, 3))
+
+# Run inference
+output = model(x)
+print(output.shape)  # 1, 1370, 384
+```
+
+## Models
+
+Jimmy currently supports the following models:
+
+- DinoV2 (various sizes: ViT-S/14, ViT-B/14, ViT-L/14, ViT-G/14)
+- MambaVision (coming soon)
+
+To load a specific model, you can use the `load_model` function with the appropriate configuration:
+
+```python
+from jimmy.models import load_model, DINOV2_VITB14
+
+model = load_model(DINOV2_VITB14, rngs=rngs)
+```
+
+## Custom Models
+
+You can also create custom models by modifying the existing configurations:
+
+```python
+custom_config = {
+    "name": "custom_dinov2",
+    "class": "dinov2",
+    "config": {
+        "num_heads": 8,
+        "embed_dim": 512,
+        "mlp_ratio": 4,
+        "patch_size": 16,
+        "depth": 8,
+        "img_size": 224,
+        "qkv_bias": True,
+    }
+}
+
+custom_model = load_model(custom_config, rngs=rngs)
+```
+
+## Contributing
+
+Contributions to Jimmy are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+Jimmy is released under the MIT License. See the [LICENSE](LICENSE.md) file for more details.
+
 ## References
 
 This library drawed inspirations from:
 
-- https://github.com/kylestach/dinov2-jax/
-- https://github.com/huggingface/pytorch-image-models/
+- [DINOv2-JAX](https://github.com/kylestach/dinov2-jax/)
+- [timm](https://github.com/huggingface/pytorch-image-models/)
+
+## Citation
+
+If you use Jimmy in your research, please cite it as follows:
+
+```bibtex
+@software{jimmy2024,
+  author = {Clément POIRET},
+  title = {Jimmy},
+  year = {2024},
+  url = {https://github.com/clementpoiret/jimmy},
+}
+```
+
+For any questions or issues, please open an issue on the GitHub repository.
