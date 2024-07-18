@@ -1,20 +1,35 @@
 [project]
 name = "jimmy"
-requires-python = ">=3.9"
+version = "0.1.0"
+description = "Popular vision models using Jax and Flax"
+license = "MIT"
+readme = "README.md"
 
 [tool.poetry]
 name = "jimmy"
 version = "0.1.0"
-license = "MIT"
-description = ""
+description = "Popular vision models using Jax and Flax"
 authors = ["clementpoiret <poiret.clement@outlook.fr>"]
+license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9"
-jax = "^0.4.30"
-jaxlib = "^0.4.30"
+python = "^3.11"
+jax = "^0.4.25"
+jaxlib = "^0.4.25"
 flax = "^0.8.5"
+py7zr = "^0.21.1"
+urllib3 = "^2.2.2"
+einops = "^0.8.0"
+
+# Needed if one wants to convert weights from pytorch
+torch = { version = "^2.3.1", optional = true }
+torchvision = { version = "^0.18.1", optional = true }
+
+[tool.poetry.extras]
+torch = ["torch", "torchvision"]
+
+[tool.poetry.group.dev.dependencies]
 
 [build-system]
 requires = ["poetry-core"]
@@ -28,3 +43,5 @@ platforms = ["linux-64"]
 jimmy = { path = ".", editable = true }
 
 [tool.pixi.tasks]
+
+[tool.pixi.dependencies]

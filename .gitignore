@@ -208,3 +208,6 @@ pyrightconfig.json
 # pixi environments
 .pixi
 *.egg-info
+
+# Personal dev stuff
+scripts/
