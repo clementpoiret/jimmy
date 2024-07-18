@@ -4,8 +4,8 @@ import jax.numpy as jnp
 from einops import reduce
 from flax import nnx
 
-from jimmy.layers import (Attention, ConvPatchEmbed, Identity, MambaVisionLayer,
-                          MambaVisionMixer, Mlp)
+from jimmy.layers import (Attention, ConvPatchEmbed, Identity,
+                          MambaVisionLayer, MambaVisionMixer, Mlp)
 
 
 def adaptive_avg_pool2d(x: jnp.ndarray):
@@ -135,7 +135,7 @@ class MambaVision(nnx.Module):
         first_half_size = (l + 1) // 2
         second_half_size = l // 2
         return ["mambavisionmixer"] * first_half_size + ["attention"
-                                                        ] * second_half_size
+                                                         ] * second_half_size
 
     def forward_features(self, x: jnp.ndarray):
         """
