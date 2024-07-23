@@ -37,13 +37,15 @@ class PatchEmbed(nnx.Module):
         use_bias: bool = True,
         rngs: nnx.Rngs = None,
     ):
-        self.patch_size = patch_size if isinstance(
-            patch_size, list) else [patch_size, patch_size]
+        self.patch_size = (
+            patch_size if isinstance(patch_size, list) else [patch_size, patch_size]
+        )
 
         if img_size is not None:
             self.img_size = (img_size, img_size)
             self.grid_size = tuple(
-                [s // p for s, p in zip(self.img_size, self.patch_size)])
+                [s // p for s, p in zip(self.img_size, self.patch_size)]
+            )
             self.num_patches = self.grid_size[0] * self.grid_size[1]
         else:
             self.img_size = None
@@ -66,8 +68,9 @@ class PatchEmbed(nnx.Module):
             rngs=rngs,
         )
 
-        self.norm = norm_layer(num_features=embed_dim,
-                               rngs=rngs) if norm_layer else None
+        self.norm = (
+            norm_layer(num_features=embed_dim, rngs=rngs) if norm_layer else None
+        )
 
     def dynamic_feat_size(self, img_size: Tuple[int, int]) -> Tuple[int, int]:
         """
@@ -82,9 +85,9 @@ class PatchEmbed(nnx.Module):
         """
         if self.dynamic_img_pad:
             return math.ceil(img_size[0] / self.patch_size[0]), math.ceil(
-                img_size[1] / self.patch_size[1])
-        return img_size[0] // self.patch_size[0], img_size[
-            1] // self.patch_size[1]
+                img_size[1] / self.patch_size[1]
+            )
+        return img_size[0] // self.patch_size[0], img_size[1] // self.patch_size[1]
 
     def __call__(self, x: jnp.ndarray):
         """
@@ -122,10 +125,8 @@ class PatchEmbed(nnx.Module):
                     )
 
         if self.dynamic_img_pad:
-            pad_h = (self.patch_size[0] -
-                     H % self.patch_size[0]) % self.patch_size[0]
-            pad_w = (self.patch_size[1] -
-                     W % self.patch_size[1]) % self.patch_size[1]
+            pad_h = (self.patch_size[0] - H % self.patch_size[0]) % self.patch_size[0]
+            pad_w = (self.patch_size[1] - W % self.patch_size[1]) % self.patch_size[1]
             x = jnp.pad(x, pad_width=((0, 0), (0, pad_h), (0, pad_w), (0, 0)))
 
         x = self.proj(x)
@@ -168,26 +169,30 @@ class ConvPatchEmbed(nnx.Module):
         norm_params: dict = {"epsilon": 1e-4},
         rngs: nnx.Rngs = None,
     ):
-        self.conv_down = nnx.Sequential([
-            nnx.Conv(in_features=in_features,
-                     out_features=hidden_features,
-                     kernel_size=(3, 3),
-                     strides=2,
-                     padding="SAME",
-                     use_bias=False,
-                     rngs=rngs),
+        self.conv_down = nnx.Sequential(
+            nnx.Conv(
+                in_features=in_features,
+                out_features=hidden_features,
+                kernel_size=(3, 3),
+                strides=2,
+                padding="SAME",
+                use_bias=False,
+                rngs=rngs,
+            ),
             norm_layer(num_features=hidden_features, rngs=rngs, **norm_params),
             act_layer,
-            nnx.Conv(in_features=hidden_features,
-                     out_features=out_features,
-                     kernel_size=(3, 3),
-                     strides=2,
-                     padding="SAME",
-                     use_bias=False,
-                     rngs=rngs),
+            nnx.Conv(
+                in_features=hidden_features,
+                out_features=out_features,
+                kernel_size=(3, 3),
+                strides=2,
+                padding="SAME",
+                use_bias=False,
+                rngs=rngs,
+            ),
             norm_layer(num_features=out_features, rngs=rngs, **norm_params),
             act_layer,
-        ])
+        )
 
     def __call__(self, x: jnp.ndarray):
         """
