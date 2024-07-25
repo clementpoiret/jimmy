@@ -15,7 +15,26 @@ Jimmy is a Jax-based library that provides implement computer vision models. It'
 
 ## Installation
 
-**NOT YET AVAILABLE**
+### Install using PyPI
+
+```sh
+pip install jimmy
+```
+
+### Cloning the repo
+
+You can either use pixi or poetry:
+
+```sh
+git clone git@github.com:clementpoiret/jimmy.git
+cd jimmy
+
+# either
+pixi install
+
+# or
+poetry install
+```
 
 ## Quick Start
 
