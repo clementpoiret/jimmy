@@ -60,7 +60,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/5c/d2/c4a2328f0dc38af25351c04ed7c19b5ba4cbad67457069870687193fc506/pyzstd-0.16.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/87/67/a37f6214d0e9fe57f6ae54b2956d550ca8365857f42a1ce0392bb21d9410/rich-13.7.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9b/00/ce54410e344b3a6032cd42ed53fe425cf57a66d28e337670292bbb419ebc/scipy-1.14.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/39/11/6159cc30f99dbdccac3c74d67277505d0e0bfc059e6cc57ef2eefc9b8751/setuptools-71.0.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d2/93/40d9bd9c7cf5d5e556894cc2a2c492e6e4ef4eda6ce9806bd1a8c47ae351/setuptools-71.0.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/9d/d1c9375ae53a67b862e611e54a416ecfd199faa4ae6e0ad522ed5b3cc04f/tensorstore-0.1.63-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/24/99/4772b8e00a136f3e01236de33b0efda31ee7077203ba5967fcc76da94d65/texttable-1.7.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b7/8a/d82202c9f89eab30f9fc05380daae87d617e2ad11571ab23d7c13a29bb54/toolz-0.12.1-py3-none-any.whl
@@ -468,10 +468,10 @@ packages:
   - scipy>=1.11.1 ; python_version >= '3.12'
   requires_python: '>=3.9'
 - kind: pypi
-  name: jimmy
-  version: 0.1.0
+  name: jimmy-vision
+  version: 0.0.1
   path: .
-  sha256: 2313c94c212f1983988ed958c8bb39030e0cff75df96cbdd6cea9399508af900
+  sha256: 29eac05b6203617212155bbf3d5bc2c2c2813ff84065df0f34f52c6afc34a62a
   editable: true
 - kind: conda
   name: ld_impl_linux-64
@@ -1083,9 +1083,9 @@ packages:
   requires_python: '>=3.10'
 - kind: pypi
   name: setuptools
-  version: 71.0.1
-  url: https://files.pythonhosted.org/packages/39/11/6159cc30f99dbdccac3c74d67277505d0e0bfc059e6cc57ef2eefc9b8751/setuptools-71.0.1-py3-none-any.whl
-  sha256: 1eb8ef012efae7f6acbc53ec0abde4bc6746c43087fd215ee09e1df48998711f
+  version: 71.0.4
+  url: https://files.pythonhosted.org/packages/d2/93/40d9bd9c7cf5d5e556894cc2a2c492e6e4ef4eda6ce9806bd1a8c47ae351/setuptools-71.0.4-py3-none-any.whl
+  sha256: ed2feca703be3bdbd94e6bb17365d91c6935c6b2a8d0bb09b66a2c435ba0b1a5
   requires_dist:
   - packaging>=24 ; extra == 'core'
   - ordered-set>=3.1.1 ; extra == 'core'
@@ -1109,7 +1109,6 @@ packages:
   - sphinxcontrib-towncrier ; extra == 'doc'
   - sphinx-notfound-page<2,>=1 ; extra == 'doc'
   - pyproject-hooks!=1.1 ; extra == 'doc'
-  - sphinx<7.4 ; extra == 'doc'
   - pytest!=8.1.*,>=6 ; extra == 'test'
   - pytest-checkdocs>=2.4 ; extra == 'test'
   - pytest-cov ; extra == 'test'

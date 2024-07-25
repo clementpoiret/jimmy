@@ -1,6 +1,8 @@
-# Jimmy
+# Jimmy Vision
 
-Jimmy is a Jax-based library that provides implement computer vision models. It's designed to be flexible, efficient, and easy to use for researchers and practitioners in the field of deep learning.
+Jimmy Vision is a Jax-based library that provides implement computer vision models.
+It's designed to be flexible, efficient, and easy to use for researchers and practitioners
+in the field of deep learning.
 
 > [!WARNING] Jimmy is not yet ready for production use.
 > It is a work in progress, intended for experimentations.
@@ -18,7 +20,7 @@ Jimmy is a Jax-based library that provides implement computer vision models. It'
 ### Install using PyPI
 
 ```sh
-pip install jimmy
+pip install jimmy-vision
 ```
 
 ### Cloning the repo
@@ -75,7 +77,8 @@ Jimmy currently supports the following models:
 - DinoV2 (various sizes: ViT-S/14, ViT-B/14, ViT-L/14, ViT-G/14)
 - MambaVision (coming soon)
 
-To load a specific model, you can use the `load_model` function with the appropriate configuration:
+To load a specific model, you can use the `load_model` function with the appropriate
+configuration:
 
 ```python
 from jimmy.models import load_model, DINOV2_VITB14
@@ -111,7 +114,8 @@ Contributions to Jimmy are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-Jimmy is released under the MIT License. See the [LICENSE](LICENSE.md) file for more details.
+Jimmy is released under the MIT License. See the [LICENSE](LICENSE.md) file for more
+details.
 
 ## References
 

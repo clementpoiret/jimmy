@@ -1,17 +1,20 @@
 [project]
-name = "jimmy"
+name = "jimmy-vision"
 version = "0.0.1"
 description = "Implementations of popular vision models in Jax (Flax NNX)"
 license = "MIT"
 readme = "README.md"
 
 [tool.poetry]
-name = "jimmy"
+name = "jimmy-vision"
 version = "0.0.1"
 description = "Implementations of popular vision models in Jax (Flax NNX)"
 authors = ["clementpoiret <poiret.clement@outlook.fr>"]
 license = "MIT"
 readme = "README.md"
+packages = [
+    { include = "jimmy" }
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
