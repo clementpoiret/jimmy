@@ -78,23 +78,6 @@ def custom_uniform(scale, dtype=jnp.float_):
     return init
 
 
-def custom_tensor(tensor, dtype=jnp.float_):
-    """Builds an initializer that returns a predefined tensor.
-
-    Args:
-        tensor (jnp.ndarray): The tensor to be returned by the initializer.
-        dtype (jnp.dtype, optional): The initializer's default dtype. Defaults to jnp.float_.
-
-    Returns:
-        Callable: An initializer function that returns the predefined tensor.
-    """
-
-    def init():
-        return tensor
-
-    return init
-
-
 class Downsample(nnx.Module):
     """Downsampling block."""
 
@@ -240,7 +223,7 @@ class MambaVisionMixer(nnx.Module):
         A = jnp.tile(A, (self.d_inner // 2, 1))
 
         A_log = jnp.log(A)
-        self.A_log = nnx.Param(custom_tensor(A_log))
+        self.A_log = nnx.Param(A_log)
         self.D = nnx.Param(
             nnx.initializers.ones(rngs.params(), [self.d_inner // 2]))
 
