@@ -264,7 +264,7 @@ class MambaVisionMixer(nnx.Module):
 
         xz = self.in_proj(x)
         x, z = jnp.split(xz, 2, axis=-1)
-        A = -jnp.exp(self.A_log.value())
+        A = -jnp.exp(self.A_log.value)
         x = nnx.silu(self.conv1d_x(x))
         z = nnx.silu(self.conv1d_z(z))
         x_dbl = self.x_proj(rearrange(x, "b l d -> (b l) d"))
