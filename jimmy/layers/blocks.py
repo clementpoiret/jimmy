@@ -41,7 +41,8 @@ class LayerScale(nnx.Module):
             rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
         """
         self.gamma = nnx.Param(
-            init_values * nnx.initializers.ones(rngs.params(), [dim]),)
+            init_values * nnx.initializers.ones(rngs.params(), [dim]),
+        )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply layer scaling to the input.
@@ -58,12 +59,14 @@ class LayerScale(nnx.Module):
 class DropPath(nnx.Module):
     """Drop paths (Stochastic Depth) per sample."""
 
-    def __init__(self,
-                 drop_prob: float = 0.,
-                 scale_by_keep: bool = True,
-                 deterministic: bool = False,
-                 rng_collection: str = "dropout",
-                 rngs: nnx.Rngs = None):
+    def __init__(
+        self,
+        drop_prob: float = 0.0,
+        scale_by_keep: bool = True,
+        deterministic: bool = False,
+        rng_collection: str = "dropout",
+        rngs: nnx.Rngs = None,
+    ):
         """Initialize the DropPath module.
 
         Args:
@@ -113,8 +116,7 @@ class DropPath(nnx.Module):
         rngs = first_from(
             rngs,
             self.rngs,
-            error_msg=
-            """`deterministic` is False, but no `rngs` argument was provided to
+            error_msg="""`deterministic` is False, but no `rngs` argument was provided to
             Dropout as either a __call__ argument or class attribute.""",
         )
         rng = rngs[self.rng_collection]()
@@ -139,15 +141,15 @@ class Block(nnx.Module):
         dim: int,
         block_type: str = "attention",
         num_heads: int = 12,
-        mlp_ratio: float = 4.,
+        mlp_ratio: float = 4.0,
         qkv_bias: bool = True,
         qk_norm: bool = False,
         ffn_bias: bool = True,
         proj_bias: bool = True,
-        proj_drop: float = 0.,
-        attn_drop: float = 0.,
+        proj_drop: float = 0.0,
+        attn_drop: float = 0.0,
         init_values: Optional[float] = None,
-        drop_path: float | list = 0.,
+        drop_path: float | list = 0.0,
         attention: nnx.Module = Attention,
         act_layer: Callable = nnx.gelu,
         norm_layer: nnx.Module = nnx.LayerNorm,
@@ -209,12 +211,15 @@ class Block(nnx.Module):
                     f"`drop_path` needs to have 2 elements, got {len(drop_path)}."
                 )
             dr1, dr2 = drop_path
+            dr1 = float(dr1)
+            dr2 = float(dr2)
         else:
-            dr1 = dr2 = drop_path
+            dr1 = dr2 = float(drop_path)
 
-        self.ls1 = LayerScale(dim, init_values,
-                              rngs=rngs) if init_values else Identity()
-        self.drop_path1 = DropPath(dr1, rngs=rngs) if dr1 > 0. else Identity()
+        self.ls1 = (
+            LayerScale(dim, init_values, rngs=rngs) if init_values else Identity()
+        )
+        self.drop_path1 = DropPath(dr1, rngs=rngs) if dr1 > 0.0 else Identity()
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
         self.mlp = ffn_layer(
@@ -225,9 +230,10 @@ class Block(nnx.Module):
             bias=ffn_bias,
             rngs=rngs,
         )
-        self.ls2 = LayerScale(dim, init_values,
-                              rngs=rngs) if init_values else Identity()
-        self.drop_path2 = DropPath(dr2, rngs=rngs) if dr2 > 0. else Identity()
+        self.ls2 = (
+            LayerScale(dim, init_values, rngs=rngs) if init_values else Identity()
+        )
+        self.drop_path2 = DropPath(dr2, rngs=rngs) if dr2 > 0.0 else Identity()
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
@@ -254,7 +260,7 @@ class ConvBlock(nnx.Module):
         act_layer: Callable = nnx.gelu,
         norm_layer: Callable = nnx.BatchNorm,
         norm_params: dict = {"epsilon": 1e-5},
-        drop_path: float = 0.,
+        drop_path: float = 0.0,
         init_values: Optional[float] = None,
         rngs: nnx.Rngs = None,
     ):
@@ -270,27 +276,33 @@ class ConvBlock(nnx.Module):
             init_values (Optional[float], optional): Initial value for LayerScale. Defaults to None.
             rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
         """
-        self.conv1 = nnx.Conv(in_features=dim,
-                              out_features=dim,
-                              kernel_size=kernel_size,
-                              strides=1,
-                              padding="SAME",
-                              use_bias=True,
-                              rngs=rngs)
+        self.conv1 = nnx.Conv(
+            in_features=dim,
+            out_features=dim,
+            kernel_size=kernel_size,
+            strides=1,
+            padding="SAME",
+            use_bias=True,
+            rngs=rngs,
+        )
         self.norm1 = norm_layer(num_features=dim, rngs=rngs, **norm_params)
         self.act = act_layer
-        self.conv2 = nnx.Conv(in_features=dim,
-                              out_features=dim,
-                              kernel_size=kernel_size,
-                              strides=1,
-                              padding="SAME",
-                              use_bias=True,
-                              rngs=rngs)
+        self.conv2 = nnx.Conv(
+            in_features=dim,
+            out_features=dim,
+            kernel_size=kernel_size,
+            strides=1,
+            padding="SAME",
+            use_bias=True,
+            rngs=rngs,
+        )
         self.norm2 = norm_layer(num_features=dim, rngs=rngs, **norm_params)
-        self.ls1 = LayerScale(dim, init_values,
-                              rngs=rngs) if init_values else Identity()
-        self.drop_path1 = DropPath(drop_path,
-                                   rngs=rngs) if drop_path > 0. else Identity()
+        self.ls1 = (
+            LayerScale(dim, init_values, rngs=rngs) if init_values else Identity()
+        )
+        self.drop_path1 = (
+            DropPath(float(drop_path), rngs=rngs) if drop_path > 0.0 else Identity()
+        )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the ConvBlock to the input.
