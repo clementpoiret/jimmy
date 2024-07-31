@@ -141,9 +141,8 @@ def ssd(
     assert x.shape[1] % chunk_size == 0
 
     # Rearrange into chunks
-    x, A, B, C = (
-        rearrange(m, "b (c l) ... -> b c l ...", l=chunk_size) for m in (x, A, B, C)
-    )
+    x, A, B, C = (rearrange(m, "b (c l) ... -> b c l ...", l=chunk_size)
+                  for m in (x, A, B, C))
 
     A = rearrange(A, "b c l h -> b h c l")
     A_cumsum = jnp.cumsum(A, axis=-1)
@@ -164,15 +163,15 @@ def ssd(
 
     states = jnp.concat([initial_states, states], axis=1)
     decay_chunk = jnp.exp(
-        segsum(jnp.pad(A_cumsum[:, :, :, -1], ((0, 0), (0, 0), (1, 0))))
-    )
+        segsum(jnp.pad(A_cumsum[:, :, :, -1], ((0, 0), (0, 0), (1, 0)))))
     new_states = jnp.einsum("bhzc, bchpn -> bzhpn", decay_chunk, states)
     states, final_state = new_states[:, :-1], new_states[:, -1]
 
     # Compute state and output conversion per chunk
     # the left term of low rank factorization of the off diagonal blocks; C terms
     state_decay_out = jnp.exp(A_cumsum)
-    Y_off = jnp.einsum("bclhn, bchpn, bhcl -> bclhp", C, states, state_decay_out)
+    Y_off = jnp.einsum("bclhn, bchpn, bhcl -> bclhp", C, states,
+                       state_decay_out)
 
     # Add the output of intra-chunk and inter-chunk states
     Y = rearrange(Y_diag + Y_off, "b c l h p -> b (c l) h p")
