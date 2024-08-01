@@ -11,7 +11,7 @@ DINOV2_VITS14 = {
         "img_size": 518,
         "reg_tokens": 0,
         "qkv_bias": True,
-    }
+    },
 }
 DINOV2_VITS14_REG = {
     "name": "dinov2_vits14_reg",
@@ -26,7 +26,7 @@ DINOV2_VITS14_REG = {
         "img_size": 518,
         "reg_tokens": 4,
         "qkv_bias": True,
-    }
+    },
 }
 DINOV2_VITB14 = {
     "name": "dinov2_vitb14",
@@ -41,7 +41,7 @@ DINOV2_VITB14 = {
         "img_size": 518,
         "reg_tokens": 0,
         "qkv_bias": True,
-    }
+    },
 }
 DINOV2_VITB14_REG = {
     "name": "dinov2_vitb14_reg",
@@ -56,7 +56,7 @@ DINOV2_VITB14_REG = {
         "img_size": 518,
         "reg_tokens": 4,
         "qkv_bias": True,
-    }
+    },
 }
 DINOV2_VITL14 = {
     "name": "dinov2_vitl14",
@@ -71,7 +71,7 @@ DINOV2_VITL14 = {
         "img_size": 518,
         "reg_tokens": 0,
         "qkv_bias": True,
-    }
+    },
 }
 DINOV2_VITL14_REG = {
     "name": "dinov2_vitl14_reg",
@@ -86,7 +86,7 @@ DINOV2_VITL14_REG = {
         "img_size": 518,
         "reg_tokens": 4,
         "qkv_bias": True,
-    }
+    },
 }
 DINOV2_VITG14 = {
     "name": "dinov2_vitg14",
@@ -102,7 +102,7 @@ DINOV2_VITG14 = {
         "reg_tokens": 0,
         "qkv_bias": True,
         "ffn_layer": "swiglu",
-    }
+    },
 }
 DINOV2_VITG14_REG = {
     "name": "dinov2_vitg14_reg",
@@ -118,5 +118,5 @@ DINOV2_VITG14_REG = {
         "reg_tokens": 4,
         "qkv_bias": True,
         "ffn_layer": "swiglu",
-    }
+    },
 }

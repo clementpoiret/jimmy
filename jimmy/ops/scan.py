@@ -1,7 +1,6 @@
 # Based on the original torch pscan impl. from radarFudan:
 # https://github.com/radarFudan/mamba-minimal-jax/blob/b76334404f7f1d87e47ffc1158b1bd151098d1c2/model.py
 # Mamba2-related code from https://github.com/walln/scratch/blob/ab0b6b891830375b7aa64c8e46e77783b843f5ca/src/scratch/language_modeling/mamba/mamba.py#L462
-
 import jax.numpy as jnp
 from einops import einsum, rearrange, repeat
 from flax import nnx
@@ -101,6 +100,22 @@ def segsum(x: jnp.ndarray):
     return x_segsum
 
 
+def find_closest_divisor(n: int, target: int):
+    """Find the closest divisor of n to the target value."""
+    divisors = jnp.arange(1, n + 1)
+    is_divisor = n % divisors == 0
+
+    # Replace non-divisors with a large value
+    large_value = jnp.iinfo(jnp.int32).max
+    valid_divisors = jnp.where(is_divisor, divisors, large_value)
+
+    # Find the index of the closest divisor
+    closest_index = jnp.argmin(jnp.abs(valid_divisors - target))
+
+    # Return the closest divisor
+    return divisors[closest_index]
+
+
 def ssd(
     x: jnp.ndarray,
     A: jnp.ndarray,
@@ -138,6 +153,7 @@ def ssd(
     Implementation taken from:
         https://github.com/walln/scratch/blob/ab0b6b891830375b7aa64c8e46e77783b843f5ca/src/scratch/language_modeling/mamba/mamba.py#L537
     """
+    # adjusted_chunk_size = find_closest_divisor(x.shape[1], chunk_size)
     assert x.shape[1] % chunk_size == 0
 
     # Rearrange into chunks

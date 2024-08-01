@@ -6,6 +6,7 @@ from flax import nnx
 from flax.nnx.nnx.module import first_from
 
 from .attention import Attention
+from .configs import MambaConfig, TransformerConfig
 from .mlp import Mlp
 
 
@@ -41,7 +42,8 @@ class LayerScale(nnx.Module):
             rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
         """
         self.gamma = nnx.Param(
-            init_values * nnx.initializers.ones(rngs.params(), [dim]), )
+            init_values * nnx.initializers.ones(rngs.params(), [dim]),
+        )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply layer scaling to the input.
@@ -115,15 +117,14 @@ class DropPath(nnx.Module):
         rngs = first_from(
             rngs,
             self.rngs,
-            error_msg=
-            """`deterministic` is False, but no `rngs` argument was provided to
+            error_msg="""`deterministic` is False, but no `rngs` argument was provided to
             Dropout as either a __call__ argument or class attribute.""",
         )
         rng = rngs[self.rng_collection]()
 
         keep_prob = 1.0 - self.drop_prob
 
-        shape = (x.shape[0], ) + (1, ) * (x.ndim - 1)
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
         random_tensor = jax.random.bernoulli(rng, p=keep_prob, shape=shape)
 
         if keep_prob > 0.0 and self.scale_by_keep:
@@ -139,7 +140,7 @@ class Block(nnx.Module):
     def __init__(
         self,
         dim: int,
-        block_type: str = "attention",
+        block_type: str = "Attention",
         num_heads: int = 12,
         mlp_ratio: float = 4.0,
         qkv_bias: bool = True,
@@ -160,7 +161,7 @@ class Block(nnx.Module):
 
         Args:
             dim (int): Input dimension.
-            block_type (str, optional): Type of block to use. Defaults to "attention".
+            block_type (str, optional): Type of block to use. Defaults to "Attention".
             num_heads (int): Number of attention heads. Defaults to 12.
             mlp_ratio (float, optional): Ratio of mlp hidden dim to embedding dim. Defaults to 4.
             qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Defaults to True.
@@ -180,29 +181,43 @@ class Block(nnx.Module):
         self.norm1 = norm_layer(num_features=dim, rngs=rngs)
 
         match block_type:
-            case "attention":
+            case "Attention":
                 self.attn = attention(
-                    dim,
-                    num_heads=num_heads,
-                    qkv_bias=qkv_bias,
-                    proj_bias=proj_bias,
-                    qk_norm=qk_norm,
-                    attn_drop=attn_drop,
-                    proj_drop=proj_drop,
-                    norm_layer=norm_layer,
+                    config=TransformerConfig(
+                        dim,
+                        num_heads=num_heads,
+                        qkv_bias=qkv_bias,
+                        proj_bias=proj_bias,
+                        qk_norm=qk_norm,
+                        attn_drop=attn_drop,
+                        proj_drop=proj_drop,
+                        norm_layer=norm_layer,
+                    ),
                     rngs=rngs,
                 )
-            case "mambavisionmixer":
+            case "MambaVisionMixer":
                 self.attn = attention(
-                    d_model=dim,
-                    d_state=8,
-                    d_conv=3,
-                    expand=1,
+                    config=MambaConfig(
+                        d_model=dim,
+                        d_state=8,
+                        d_conv=3,
+                        expand=1,
+                    ),
+                    rngs=rngs,
+                )
+            case "Mamba2VisionMixer":
+                self.attn = attention(
+                    config=MambaConfig(
+                        d_model=dim,
+                        d_state=8,
+                        d_conv=3,
+                        expand=1,
+                    ),
                     rngs=rngs,
                 )
             case _:
                 raise NotImplementedError(
-                    f"block_type `{block_type}` undefined. Should be one of [`attention`, `mambavisionmixer`]"
+                    f"block_type `{block_type}` undefined. Should be one of [`Attention`, `MambaVisionMixer`, `Mamba2VisionMixer`]"
                 )
 
         if isinstance(drop_path, list):
@@ -216,8 +231,9 @@ class Block(nnx.Module):
         else:
             dr1 = dr2 = float(drop_path)
 
-        self.ls1 = (LayerScale(dim, init_values, rngs=rngs)
-                    if init_values else Identity())
+        self.ls1 = (
+            LayerScale(dim, init_values, rngs=rngs) if init_values else Identity()
+        )
         self.drop_path1 = DropPath(dr1, rngs=rngs) if dr1 > 0.0 else Identity()
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
@@ -229,8 +245,9 @@ class Block(nnx.Module):
             bias=ffn_bias,
             rngs=rngs,
         )
-        self.ls2 = (LayerScale(dim, init_values, rngs=rngs)
-                    if init_values else Identity())
+        self.ls2 = (
+            LayerScale(dim, init_values, rngs=rngs) if init_values else Identity()
+        )
         self.drop_path2 = DropPath(dr2, rngs=rngs) if dr2 > 0.0 else Identity()
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -295,10 +312,12 @@ class ConvBlock(nnx.Module):
             rngs=rngs,
         )
         self.norm2 = norm_layer(num_features=dim, rngs=rngs, **norm_params)
-        self.ls1 = (LayerScale(dim, init_values, rngs=rngs)
-                    if init_values else Identity())
-        self.drop_path1 = (DropPath(float(drop_path), rngs=rngs)
-                           if drop_path > 0.0 else Identity())
+        self.ls1 = (
+            LayerScale(dim, init_values, rngs=rngs) if init_values else Identity()
+        )
+        self.drop_path1 = (
+            DropPath(float(drop_path), rngs=rngs) if drop_path > 0.0 else Identity()
+        )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the ConvBlock to the input.
