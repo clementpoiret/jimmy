@@ -211,3 +211,5 @@ pyrightconfig.json
 
 # Personal dev stuff
 scripts/
+_tests/
+.aider*
