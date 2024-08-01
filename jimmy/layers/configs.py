@@ -52,7 +52,7 @@ class MambaConfig:
     chunk_size: int = 64
     A_init_range: Tuple[int, int] = (1, 16)
     use_fast_path: bool = True
-    layer_idx: int | None = (None,)
+    layer_idx: int | None = (None, )
     bias: bool = False
     conv_bias: bool = True
 
@@ -69,6 +69,5 @@ class MambaConfig:
         self.indices_xBC = [self.d_inner, self.d_inner + self.d_state]
 
         # Mamba-1
-        self.dt_rank = (
-            math.ceil(self.d_model / 16) if self.dt_rank == "auto" else self.dt_rank
-        )
+        self.dt_rank = (math.ceil(self.d_model / 16)
+                        if self.dt_rank == "auto" else self.dt_rank)
