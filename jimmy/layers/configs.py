@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+from typing import Tuple
 
 from flax import nnx
 
@@ -49,6 +50,7 @@ class MambaConfig:
     expand: int = 2
     head_dim: int = 64
     chunk_size: int = 64
+    A_init_range: Tuple[int, int] = (1, 16)
     use_fast_path: bool = True
     layer_idx: int | None = (None,)
     bias: bool = False
@@ -61,6 +63,8 @@ class MambaConfig:
         assert self.d_inner % self.head_dim == 0
 
         # Mamba-2
+        A_min, A_max = self.A_init_range
+        assert 0 < A_min < A_max
         self.n_heads = self.d_inner // self.head_dim
         self.indices_xBC = [self.d_inner, self.d_inner + self.d_state]
 

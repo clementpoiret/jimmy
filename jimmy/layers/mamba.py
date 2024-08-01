@@ -287,8 +287,15 @@ class Mamba2VisionMixer(nnx.Module):
         )
 
         self.dt_bias = nnx.Param(jnp.zeros(config.n_heads), rngs=rngs)
-        self.A_log = nnx.Param(jnp.zeros(config.n_heads), rngs=rngs)
-        self.D = nnx.Param(jnp.zeros(config.n_heads), rngs=rngs)
+
+        A_min, A_max = config.A_init_range
+        key = rngs.params()
+        A = random.uniform(key, (config.n_heads,), minval=A_min, maxval=A_max)
+        A_log = jnp.log(A)
+        self.A_log = nnx.Param(A_log, rngs=rngs)
+
+        self.D = nnx.Param(jnp.ones(config.n_heads), rngs=rngs)
+
         self.norm = nnx.RMSNorm(config.d_inner, rngs=rngs)
         self.out_proj = nnx.Linear(
             config.d_inner, config.d_model, use_bias=config.bias, rngs=rngs
