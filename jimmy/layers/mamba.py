@@ -19,14 +19,15 @@ from .mlp import Mlp
 
 
 class Downsample(nnx.Module):
-    """Downsampling block."""
+    """Downsampling block for reducing spatial dimensions of feature maps."""
 
     def __init__(self, dim: int, keep_dim: bool = False, rngs: nnx.Rngs = None):
-        """Initialize the Block.
+        """Initialize the Downsample block.
 
         Args:
-            dim (int): Input dimension.
-            keep_dim (bool): If True, maintain the resolution.
+            dim (int): Number of input channels.
+            keep_dim (bool): If True, maintain the number of channels in the output.
+                             If False, double the number of channels.
             rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
         """
         dim_out = dim if keep_dim else 2 * dim
@@ -47,34 +48,23 @@ class Downsample(nnx.Module):
 class MambaVisionMixer(nnx.Module):
     """MambaVision Mixer from Ali Hatamizadeh and Jan Kautz.
 
-    This class implements the MambaVision Mixer, a novel architecture for vision tasks.
+    This class implements the MambaVision Mixer, a novel architecture for vision tasks
+    that combines the strengths of state space models and vision transformers.
 
     Attributes:
-        d_model (int): Hidden dimension size.
-        d_state (int): Latent space dimension size.
-        d_conv (int): Convolution dimension size.
-        expand (int): Expansion factor.
-        d_inner (int): Inner dimension size (d_model * expand).
-        dt_rank (int): Rank for delta time projection.
-        use_fast_path (bool): Whether to use the fast path computation.
-        layer_idx (int | None): Layer index, if applicable.
+        config (MambaConfig): Configuration object containing model hyperparameters.
+        in_proj (nnx.Linear): Input projection layer.
+        x_proj (nnx.Linear): Projection layer for x.
+        dt_proj (nnx.Linear): Projection layer for delta time.
+        A_log (nnx.Param): Logarithm of the state transition matrix A.
+        D (nnx.Param): Direct feedthrough matrix D.
+        out_proj (nnx.Linear): Output projection layer.
+        conv1d_x (nnx.Conv): 1D convolution for x.
+        conv1d_z (nnx.Conv): 1D convolution for z.
 
     Args:
-        d_model (int): Hidden dimension size.
-        d_state (int, optional): Latent space dimension size. Defaults to 16.
-        d_conv (int, optional): Convolution dimension size. Defaults to 4.
-        expand (int, optional): Expansion factor. Defaults to 2.
-        dt_rank (str, optional): Rank for delta time projection. Defaults to "auto".
-        dt_min (float, optional): Minimum delta time value. Defaults to 0.001.
-        dt_max (float, optional): Maximum delta time value. Defaults to 0.1.
-        dt_init (str, optional): Initialization method for delta time. Defaults to "random".
-        dt_scale (float, optional): Scaling factor for delta time. Defaults to 1.0.
-        dt_init_floor (float, optional): Floor value for delta time initialization. Defaults to 1e-4.
-        conv_bias (bool, optional): Whether to use bias in convolutions. Defaults to True.
-        bias (bool, optional): Whether to use bias in linear layers. Defaults to False.
-        use_fast_path (bool, optional): Whether to use the fast path computation. Defaults to True.
-        layer_idx (int | None, optional): Layer index, if applicable. Defaults to None.
-        rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
+        config (MambaConfig): Configuration object for the MambaVisionMixer.
+        rngs (nnx.Rngs): Random number generators for parameter initialization.
 
     Notes:
         - b: batch size                       (`B` in Mamba paper [1] Algorithm 2)
@@ -90,6 +80,7 @@ class MambaVisionMixer(nnx.Module):
 
     References:
         [1] Mamba: Linear-Time Sequence Modeling with Selective State Spaces
+            (https://arxiv.org/abs/2312.00752)
     """
 
     def __init__(
@@ -249,18 +240,29 @@ class Mamba2VisionMixer(nnx.Module):
     """Mamba2Vision Mixer.
 
     This class implements the MambaVision Mixer using Structured State Space Duality (SSD),
-    from Mamba2 [1].
+    from Mamba2 [1]. It extends the original MambaVision Mixer by incorporating SSD
+    for more efficient computation and potentially improved performance.
 
     Attributes:
+        config (MambaConfig): Configuration object containing model hyperparameters.
+        in_proj (nnx.Linear): Input projection layer.
+        conv (nnx.Conv): Convolutional layer for processing input.
+        dt_bias (nnx.Param): Bias for delta time.
+        A_log (nnx.Param): Logarithm of the state transition matrix A.
+        D (nnx.Param): Direct feedthrough matrix D.
+        norm (nnx.RMSNorm): Root Mean Square Layer Normalization.
+        out_proj (nnx.Linear): Output projection layer.
 
     Args:
-        rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
+        config (MambaConfig): Configuration object for the Mamba2VisionMixer.
+        rngs (nnx.Rngs): Random number generators for parameter initialization.
 
     Notes:
-        Heavily based on wlln/scratch.
+        This implementation is heavily based on wlln/scratch.
 
     References:
         [1] Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality
+            (https://arxiv.org/abs/2401.04054)
     """
 
     def __init__(
@@ -448,6 +450,7 @@ class MambaVisionLayer(nnx.Module):
 
     This class implements a layer of the MambaVision architecture, which can be either
     a convolutional block or a transformer block, optionally followed by a downsampling operation.
+    It supports both traditional transformer attention and Mamba-style mixing mechanisms.
 
     Attributes:
         conv (bool): Whether to use convolutional blocks instead of transformer blocks.
@@ -474,11 +477,12 @@ class MambaVisionLayer(nnx.Module):
         drop_path (float | list, optional): Stochastic depth rate. Defaults to 0.0.
         init_values (float | None, optional): Initial layer scale value. Defaults to None.
         init_values_conv (float | None, optional): Initial layer scale value for conv blocks. Defaults to None.
-        attention (Callable, optional): Attention mechanism to use. Defaults to Attention.
+        transformer_attention (Callable, optional): Attention mechanism to use for transformer blocks. Defaults to Attention.
+        mamba_mixer (Callable, optional): Mamba mixing mechanism to use. Defaults to MambaVisionMixer.
         act_layer (Callable, optional): Activation function to use. Defaults to nnx.gelu.
         norm_layer (Callable, optional): Normalization layer to use. Defaults to nnx.LayerNorm.
         ffn_layer (Callable, optional): Feed-forward network layer to use. Defaults to Mlp.
-        block_types (list, optional): List of transformer block types. Defaults to [].
+        block_types (list, optional): List of block types to use in the layer. Defaults to [].
         rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
     """
 
