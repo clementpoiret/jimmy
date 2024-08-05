@@ -55,7 +55,7 @@ class MambaConfig:
     A_init_range: Tuple[int, int] = (1, 16)
     linear_attn_duality: bool = True
     use_fast_path: bool = True
-    layer_idx: int | None = (None,)
+    layer_idx: int | None = (None, )
     bias: bool = False
     conv_bias: bool = True
 
@@ -66,15 +66,16 @@ class MambaConfig:
         assert self.d_inner % self.head_dim == 0
 
         if self.n_groups == -1:
-            self.n_groups = (
-                self.d_inner // self.headdim
-            )  # equivalent to multi-head attention
+            self.n_groups = (self.d_inner // self.headdim
+                             )  # equivalent to multi-head attention
 
         # Mamba-2
         A_min, A_max = self.A_init_range
         assert 0 < A_min < A_max
         self.n_heads = self.d_inner // self.head_dim
-        self.indices_xBC = [self.d_inner, self.d_inner + self.n_groups * self.d_state]
+        self.indices_xBC = [
+            self.d_inner, self.d_inner + self.n_groups * self.d_state
+        ]
         # self.indices_xBC = [
         #     self.d_inner,
         #     self.n_groups * self.d_state,
@@ -82,6 +83,5 @@ class MambaConfig:
         # ]
 
         # Mamba-1
-        self.dt_rank = (
-            math.ceil(self.d_model / 16) if self.dt_rank == "auto" else self.dt_rank
-        )
+        self.dt_rank = (math.ceil(self.d_model / 16)
+                        if self.dt_rank == "auto" else self.dt_rank)

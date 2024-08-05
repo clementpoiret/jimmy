@@ -31,21 +31,21 @@ class Attention(nnx.Module):
     ):
         self.config = config
 
-        self.qkv = nnx.Linear(
-            config.dim, config.dim * 3, use_bias=config.qkv_bias, rngs=rngs
-        )
+        self.qkv = nnx.Linear(config.dim,
+                              config.dim * 3,
+                              use_bias=config.qkv_bias,
+                              rngs=rngs)
         self.attn_drop = nnx.Dropout(config.attn_drop, rngs=rngs)
-        self.proj = nnx.Linear(
-            config.dim, config.dim, use_bias=config.proj_bias, rngs=rngs
-        )
+        self.proj = nnx.Linear(config.dim,
+                               config.dim,
+                               use_bias=config.proj_bias,
+                               rngs=rngs)
         self.proj_drop = nnx.Dropout(config.proj_drop, rngs=rngs)
 
-        self.q_norm = (
-            config.norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
-        )
-        self.k_norm = (
-            config.norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
-        )
+        self.q_norm = (config.norm_layer(config.head_dim, rngs=rngs)
+                       if config.qk_norm else None)
+        self.k_norm = (config.norm_layer(config.head_dim, rngs=rngs)
+                       if config.qk_norm else None)
 
     def __call__(self, x: jnp.ndarray):
         """
@@ -69,8 +69,7 @@ class Attention(nnx.Module):
 
         qkv = self.qkv(x)
         qkv = jnp.reshape(
-            qkv, (B, N, 3, self.config.num_heads, C // self.config.num_heads)
-        )
+            qkv, (B, N, 3, self.config.num_heads, C // self.config.num_heads))
         qkv = jnp.transpose(qkv, (2, 0, 3, 1, 4))
 
         q, k, v = tuple(qkv)
