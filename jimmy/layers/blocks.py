@@ -2,6 +2,7 @@ from typing import Callable, Optional
 
 import jax
 import jax.numpy as jnp
+from einops import rearrange
 from flax import nnx
 from flax.nnx.nnx.module import first_from
 
@@ -149,6 +150,10 @@ class Block(nnx.Module):
         proj_bias: bool = True,
         proj_drop: float = 0.0,
         attn_drop: float = 0.0,
+        d_state: int | None = None,
+        expand: int | None = None,
+        chunk_size: int | None = None,
+        linear_attn_duality: bool = False,
         init_values: Optional[float] = None,
         drop_path: float | list = 0.0,
         attention: nnx.Module = Attention,
@@ -199,9 +204,9 @@ class Block(nnx.Module):
                 self.attn = attention(
                     config=MambaConfig(
                         d_model=dim,
-                        d_state=8,
+                        d_state=d_state | 8,
                         d_conv=3,
-                        expand=1,
+                        expand=expand | 1,
                     ),
                     rngs=rngs,
                 )
@@ -209,9 +214,11 @@ class Block(nnx.Module):
                 self.attn = attention(
                     config=MambaConfig(
                         d_model=dim,
-                        d_state=8,
+                        d_state=d_state | 64,
                         d_conv=3,
-                        expand=1,
+                        expand=expand | 2,
+                        linear_attn_duality=linear_attn_duality,
+                        chunk_size=chunk_size,
                     ),
                     rngs=rngs,
                 )
@@ -341,5 +348,175 @@ class ConvBlock(nnx.Module):
         x2 = self.act(self.norm1(self.conv1(x)))
         x2 = self.ls1(self.norm2(self.conv2(x2)))
         x = x + self.drop_path1(x2)
+
+        return x
+
+
+class VMamba2Block(nnx.Module):
+    """VMamba-2 Block, from the VSSD paper"""
+
+    def __init__(
+        self,
+        dim: int,
+        block_type: str = "Attention",
+        num_heads: int = 12,
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = True,
+        qk_norm: bool = False,
+        ffn_bias: bool = True,
+        proj_bias: bool = True,
+        proj_drop: float = 0.0,
+        attn_drop: float = 0.0,
+        drop_path: float = 0.0,
+        d_state: int | None = None,
+        expand: int | None = None,
+        chunk_size: int | None = None,
+        linear_attn_duality: bool = False,
+        attention: nnx.Module = Attention,
+        act_layer: Callable = nnx.gelu,
+        norm_layer: nnx.Module = nnx.LayerNorm,
+        ffn_layer: nnx.Module = Mlp,
+        init_values: Optional[float] = None,
+        rngs: nnx.Rngs = None,
+    ):
+        """Initialize the Block.
+
+        Args:
+            dim (int): Input dimension.
+            block_type (str, optional): Type of block to use. Defaults to "Attention".
+            num_heads (int): Number of attention heads. Defaults to 12.
+            mlp_ratio (float, optional): Ratio of mlp hidden dim to embedding dim. Defaults to 4.
+            qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Defaults to True.
+            qk_norm (bool, optional): If True, normalize the query and key. Defaults to False.
+            ffn_bias (bool, optional): If True, use bias in the feed-forward network. Defaults to True.
+            proj_bias (bool, optional): If True, use bias in projections. Defaults to True.
+            proj_drop (float, optional): Dropout rate of the projection. Defaults to 0.
+            attn_drop (float, optional): Dropout rate of the attention. Defaults to 0.
+            drop_path (float): Stochastic depth rate. Defaults to 0.
+            attention (nnx.Module, optional): Attention module. Defaults to Attention.
+            act_layer (Callable, optional): Activation function. Defaults to nnx.gelu.
+            norm_layer (nnx.Module, optional): Normalization layer. Defaults to nnx.LayerNorm.
+            ffn_layer (nnx.Module, optional): Feed-forward network module. Defaults to Mlp.
+            init_values (Optional[float], optional): Initial value for LayerScale. Defaults to None.
+            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
+        """
+        self.cpe1 = nnx.Conv(
+            in_features=dim,
+            out_features=dim,
+            kernel_size=3,
+            strides=1,
+            padding=1,
+            feature_group_count=dim,
+            use_bias=True,
+            rngs=rngs,
+        )
+        self.norm1 = norm_layer(num_features=dim, rngs=rngs)
+
+        match block_type:
+            case "Attention":
+                self.attn = attention(
+                    config=TransformerConfig(
+                        dim,
+                        num_heads=num_heads,
+                        qkv_bias=qkv_bias,
+                        proj_bias=proj_bias,
+                        qk_norm=qk_norm,
+                        attn_drop=attn_drop,
+                        proj_drop=proj_drop,
+                        norm_layer=norm_layer,
+                    ),
+                    rngs=rngs,
+                )
+            case "MambaVisionMixer":
+                self.attn = attention(
+                    config=MambaConfig(
+                        d_model=dim,
+                        d_state=d_state | 8,
+                        d_conv=3,
+                        expand=expand | 1,
+                    ),
+                    rngs=rngs,
+                )
+            case "Mamba2Mixer":
+                self.attn = attention(
+                    config=MambaConfig(
+                        d_model=dim,
+                        d_state=d_state | 64,
+                        d_conv=3,
+                        expand=expand | 2,
+                        linear_attn_duality=linear_attn_duality,
+                        chunk_size=chunk_size,
+                    ),
+                    rngs=rngs,
+                )
+            case "Mamba2VisionMixer":
+                self.attn = attention(
+                    config=MambaConfig(
+                        d_model=dim,
+                        d_state=8,
+                        d_conv=3,
+                        expand=1,
+                    ),
+                    rngs=rngs,
+                )
+            case _:
+                raise NotImplementedError(
+                    f"block_type `{block_type}` undefined. Should be one of [`Attention`, `MambaVisionMixer`, `Mamba2Mixer`, `Mamba2VisionMixer`]"
+                )
+
+        self.ls1 = (
+            LayerScale(dim, init_values, rngs=rngs) if init_values else Identity()
+        )
+        self.drop_path1 = (
+            DropPath(drop_path, rngs=rngs) if drop_path > 0.0 else Identity()
+        )
+        self.cpe2 = nnx.Conv(
+            in_features=dim,
+            out_features=dim,
+            kernel_size=3,
+            strides=1,
+            padding=1,
+            feature_group_count=dim,
+            use_bias=True,
+            rngs=rngs,
+        )
+
+        self.norm2 = norm_layer(num_features=dim, rngs=rngs)
+        self.mlp = ffn_layer(
+            in_features=dim,
+            hidden_features=int(dim * mlp_ratio),
+            act_layer=act_layer,
+            dropout_rate=proj_drop,
+            bias=ffn_bias,
+            rngs=rngs,
+        )
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply the block to the input.
+
+        Args:
+            x (jnp.ndarray): Input tensor.
+
+        Returns:
+            jnp.ndarray: Output after applying the block.
+        """
+        _, l, _ = x.shape
+        # Let's assume a squared initial shape
+        h = w = int(l**0.5)
+
+        x1 = x + rearrange(
+            self.cpe1(rearrange(x, "b (h w) c -> b h w c", h=h, w=w)),
+            "b h w c -> b (h w) c",
+        )
+        x1 = self.attn(self.norm1(x1))
+
+        x += self.drop_path1(x1)
+
+        x += rearrange(
+            self.cpe2(rearrange(x, "b (h w) c -> b h w c", h=h, w=w)),
+            "b h w c -> b (h w) c",
+        )
+
+        x += self.drop_path1(self.mlp(self.norm2(x)))
 
         return x

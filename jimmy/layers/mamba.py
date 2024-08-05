@@ -11,7 +11,7 @@ from jimmy.ops.scan import selective_scan, ssd
 from jimmy.utils import custom_uniform, window_partition, window_reverse
 
 from .attention import Attention
-from .blocks import Block, ConvBlock
+from .blocks import Block, ConvBlock, VMamba2Block
 from .configs import MambaConfig
 from .mlp import Mlp
 from .norm import RMSNormGated
@@ -299,8 +299,6 @@ class Mamba2Mixer(nnx.Module):
         B: jnp.ndarray,
         C: jnp.ndarray,
         D: jnp.ndarray,
-        H: Optional[int] = None,
-        W: Optional[int] = None,
     ):
         """Non-casual attention duality from the VSSD paper."""
         b, l, h, d = x.shape
@@ -346,9 +344,7 @@ class Mamba2Mixer(nnx.Module):
 
         return x
 
-    def __call__(
-        self, x: jnp.ndarray, H: Optional[int] = None, W: Optional[int] = None
-    ):
+    def __call__(self, x: jnp.ndarray):
         """Forward pass of the VMamba2Mixer using non-casual attention duality.
 
         Args:
@@ -384,9 +380,7 @@ class Mamba2Mixer(nnx.Module):
         x = rearrange(x, "b l (h p) -> b l h p", p=self.config.head_dim)
 
         if self.config.linear_attn_duality:
-            y = self.non_casual_linear_attn(
-                x, dt=dt, A=A, B=B, C=C, D=self.D.value, H=H, W=W
-            )
+            y = self.non_casual_linear_attn(x, dt=dt, A=A, B=B, C=C, D=self.D.value)
         else:
             # apply ssd function
             # TODO: Bidirectional
@@ -709,6 +703,74 @@ class MambaVisionLayer(nnx.Module):
             x = window_reverse(x, self.window_size, Hp, Wp)
             if pad_r > 0 or pad_b > 0:
                 x = x[:, :H, :W, :]
+
+        if self.downsample is not None:
+            x = self.downsample(x)
+
+        return x
+
+
+class VMamba2Layer(nnx.Module):
+    """A basic MLLA layer for one stage"""
+
+    def __init__(
+        self,
+        dim: int,
+        depth: int,
+        num_heads: int,
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = True,
+        qk_norm: bool = False,
+        ffn_bias: bool = True,
+        proj_bias: bool = True,
+        proj_drop: float = 0.0,
+        attn_drop: float = 0.0,
+        drop_path: float | list = 0.0,
+        init_values: float | None = None,
+        transformer_attention: Callable = Attention,
+        mamba_mixer: Callable = Mamba2Mixer,
+        act_layer: Callable = nnx.gelu,
+        norm_layer: Callable = nnx.LayerNorm,
+        ffn_layer: Callable = Mlp,
+        linear_attn_duality: bool = False,
+        d_state: int = 64,
+        expand: int = 2,
+        chunk_size: int = 256,
+        downsample: Optional[nnx.Module] = None,
+        rngs: nnx.Rngs = None,
+    ):
+        self.blocks = [
+            VMamba2Block(
+                dim=dim,
+                block_type="Mamba2Mixer",
+                num_heads=num_heads,
+                mlp_ratio=mlp_ratio,
+                qkv_bias=qkv_bias,
+                qk_norm=qk_norm,
+                ffn_bias=ffn_bias,
+                proj_bias=proj_bias,
+                proj_drop=proj_drop,
+                attn_drop=attn_drop,
+                init_values=init_values,
+                drop_path=(drop_path[i] if isinstance(drop_path, list) else drop_path),
+                attention=mamba_mixer,
+                act_layer=act_layer,
+                norm_layer=norm_layer,
+                ffn_layer=ffn_layer,
+                linear_attn_duality=linear_attn_duality,
+                d_state=d_state,
+                expand=expand,
+                chunk_size=chunk_size,
+                rngs=rngs,
+            )
+            for i in range(depth)
+        ]
+
+        self.downsample = downsample(dim=dim) if downsample is not None else None
+
+    def __call__(self, x: jnp.ndarray):
+        for blk in self.blocks:
+            x = blk(x)
 
         if self.downsample is not None:
             x = self.downsample(x)
