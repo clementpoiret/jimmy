@@ -1,7 +1,9 @@
 import jax.numpy as jnp
+from einops import rearrange, reduce
 from flax import nnx
 
 from .configs import TransformerConfig
+from .rope import RoPE
 
 
 class Attention(nnx.Module):
@@ -85,5 +87,72 @@ class Attention(nnx.Module):
         x = (attn @ v).transpose(0, 2, 1, 3).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
+
+        return x
+
+
+class LinearAttention(nnx.Module):
+    """Linear Attention from Mamba-like Linear Attention (MLLA) paper."""
+
+    def __init__(
+        self,
+        dim: int,
+        # input_resolution: tuple,
+        num_heads: int,
+        qkv_bias: bool = True,
+        rngs: nnx.Rngs = None,
+    ):
+        self.dim = dim
+
+        self.qk = nnx.Linear(dim, dim * 2, rngs=rngs)
+        self.lepe = nnx.Conv(
+            in_features=dim,
+            out_features=dim,
+            kernel_size=(3, 3),
+            padding=(1, 1),
+            feature_group_count=dim,
+            rngs=rngs,
+        )
+        # self.rope = RoPE(shape=(input_resolution[0], input_resolution[1], dim))
+
+    def __call__(self, x: jnp.ndarray):
+        b, n, c = x.shape
+        h = int(n**0.5)
+        w = int(n**0.5)
+        num_heads = self.num_heads
+        head_dim = c // num_heads
+
+        q, k = rearrange(self.qk(x), "b n (qk h d) -> qk b h n d", qk=2, h=num_heads)
+        v = rearrange(x, "b n (h d) -> b h n d", h=num_heads)
+
+        q = nnx.elu(q) + 1.0
+        k = nnx.elu(k) + 1.0
+
+        # TODO: Try to define rope here to avoid setting input_resolution a priori
+        rope = RoPE(shape=(h, w, c))
+        q_2d = rearrange(q, "b h (x y) d -> b x y (h d)", x=h, y=w)
+        k_2d = rearrange(k, "b h (x y) d -> b x y (h d)", x=h, y=w)
+
+        q_rope = rearrange(rope(q_2d), "b x y (h d) -> b h (x y) d", h=num_heads)
+        k_rope = rearrange(rope(k_2d), "b x y (h d) -> b h (x y) d", h=num_heads)
+
+        # Compute attention
+        z = 1 / (
+            jnp.einsum("bhnd,bhd->bhn", q, reduce(k, "b h n d -> b h d", "mean")) + 1e-6
+        )
+        kv = jnp.einsum("bhnd,bhne->bhde", k_rope * (n**-0.5), v * (n**-0.5))
+        x = jnp.einsum("bhnd,bhde->bhne", q_rope, kv) * z[..., None]
+
+        # Reshape output
+        x = rearrange(x, "b h n d -> b n (h d)")
+
+        # Apply LePE
+        v_2d = rearrange(v, "b h (x y) d -> b x y (h d)", x=h, y=w)
+        lepe_out = self.lepe(v_2d)
+
+        lepe_out = rearrange(lepe_out, "b x y (h d) -> b (x y) (h d)", h=num_heads)
+
+        # Combine attention output and LePE
+        x = x + lepe_out
 
         return x
