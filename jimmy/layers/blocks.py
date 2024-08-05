@@ -205,6 +205,16 @@ class Block(nnx.Module):
                     ),
                     rngs=rngs,
                 )
+            case "Mamba2Mixer":
+                self.attn = attention(
+                    config=MambaConfig(
+                        d_model=dim,
+                        d_state=8,
+                        d_conv=3,
+                        expand=1,
+                    ),
+                    rngs=rngs,
+                )
             case "Mamba2VisionMixer":
                 self.attn = attention(
                     config=MambaConfig(
@@ -217,7 +227,7 @@ class Block(nnx.Module):
                 )
             case _:
                 raise NotImplementedError(
-                    f"block_type `{block_type}` undefined. Should be one of [`Attention`, `MambaVisionMixer`, `Mamba2VisionMixer`]"
+                    f"block_type `{block_type}` undefined. Should be one of [`Attention`, `MambaVisionMixer`, `Mamba2Mixer`, `Mamba2VisionMixer`]"
                 )
 
         if isinstance(drop_path, list):

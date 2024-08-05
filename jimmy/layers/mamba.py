@@ -1,9 +1,9 @@
 import math
-from typing import Callable, NamedTuple
+from typing import Callable, Optional
 
 import jax
 import jax.numpy as jnp
-from einops import rearrange
+from einops import rearrange, repeat
 from flax import nnx
 from jax import random
 
@@ -14,8 +14,10 @@ from .attention import Attention
 from .blocks import Block, ConvBlock
 from .configs import MambaConfig
 from .mlp import Mlp
+from .norm import RMSNormGated
 
-# TODO: Inference cache
+# TODO: Inference cache as in https://github.com/walln/scratch/blob/ab0b6b891830375b7aa64c8e46e77783b843f5ca/src/scratch/language_modeling/mamba/mamba.py
+# TODO: Learnable init state (as in mamba.py)
 
 
 class Downsample(nnx.Module):
@@ -144,7 +146,7 @@ class MambaVisionMixer(nnx.Module):
             out_features=config.d_inner // 2,
             kernel_size=(config.d_conv,),
             feature_group_count=config.d_inner // 2,
-            use_bias=config.conv_bias // 2 > 0,
+            use_bias=config.conv_bias,
             padding="SAME",
             rngs=rngs,
         )
@@ -153,7 +155,7 @@ class MambaVisionMixer(nnx.Module):
             out_features=config.d_inner // 2,
             kernel_size=(config.d_conv,),
             feature_group_count=config.d_inner // 2,
-            use_bias=config.conv_bias // 2 > 0,
+            use_bias=config.conv_bias,
             padding="SAME",
             rngs=rngs,
         )
@@ -180,6 +182,7 @@ class MambaVisionMixer(nnx.Module):
             [self.config.dt_rank, self.config.d_state + self.config.dt_rank],
             axis=-1,
         )
+
         dt = rearrange(self.dt_proj(dt), "(b l) d -> b d l", l=L)
         B = rearrange(B, "(b l) d -> b d l", l=L)
         C = rearrange(C, "(b l) d -> b d l", l=L)
@@ -205,43 +208,232 @@ class MambaVisionMixer(nnx.Module):
         return out
 
 
-class InferenceCache(NamedTuple):
-    """Inference Cache.
+class Mamba2Mixer(nnx.Module):
+    """Mamba2 Mixer.
+
+    This class implements the a Mamba2 Mixer using State Space Duality (SSD),
+    from Mamba2 [1]. Also supports implementation details from Visual State Space
+    Duality (VSSD) [2].
 
     Attributes:
-        conv_state (batch_size, d_inner + 2 * d_state, d_conv): convolution state
-        ssm_state (batch_size, n_heads, head_dim, d_state): SSM state
+        config (MambaConfig): Configuration object containing model hyperparameters.
+        in_proj (nnx.Linear): Input projection layer.
+        conv (nnx.Conv): Convolutional layer for processing input.
+        dt_bias (nnx.Param): Bias for delta time.
+        A_log (nnx.Param): Logarithm of the state transition matrix A.
+        D (nnx.Param): Direct feedthrough matrix D.
+        norm (nnx.RMSNorm): Root Mean Square Layer Normalization.
+        out_proj (nnx.Linear): Output projection layer.
+
+    Args:
+        config (MambaConfig): Configuration object for the Mamba2VisionMixer.
+        rngs (nnx.Rngs): Random number generators for parameter initialization.
+
+    Notes:
+        This implementation is heavily based on wlln/scratch.
+
+    References:
+        [1] Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality
+            (https://arxiv.org/abs/2401.04054)
+        [2] VSSD: Vision Mamba with Non-Casual State Space Duality
+            (https://arxiv.org/abs/2407.18559)
     """
 
-    conv_state: jnp.ndarray
-    ssm_state: jnp.ndarray
-
-    @staticmethod
-    def allocate(
-        batch_size: int,
+    def __init__(
+        self,
         config: MambaConfig,
+        *,
+        rngs: nnx.Rngs,
     ):
-        """Allocate InferenceCache.
+        self.config = config
+
+        d_in_proj = (
+            2 * config.d_inner + 2 * config.n_groups * config.d_state + config.n_heads
+        )
+        self.in_proj = nnx.Linear(
+            config.d_model, d_in_proj, use_bias=config.bias, rngs=rngs
+        )
+
+        conv_dim = config.d_inner + 2 * config.n_groups * config.d_state
+        self.conv = nnx.Conv(
+            in_features=conv_dim,
+            out_features=conv_dim,
+            kernel_size=(config.d_conv,),
+            feature_group_count=conv_dim,
+            padding=[((config.d_conv - 1) // 2, (config.d_conv - 1) // 2)],
+            use_bias=config.conv_bias,
+            rngs=rngs,
+        )
+
+        if config.learnable_init_states:
+            self.init_states = nnx.Param(jnp.ones(config.n_heads), rngs=rngs)
+
+        key = rngs.params()
+        rand_vals = random.uniform(key, (config.n_heads,))
+        dt = jnp.exp(
+            rand_vals * (math.log(config.dt_max) - math.log(config.dt_min))
+            + math.log(config.dt_min)
+        )
+        dt = jnp.clip(dt, a_min=config.dt_init_floor)
+        inv_dt = dt + jnp.log(-jnp.expm1(-dt))
+        self.dt_bias = nnx.Param(inv_dt, rngs=rngs)
+
+        A_min, A_max = config.A_init_range
+        key = rngs.params()
+        A = random.uniform(key, (config.n_heads,), minval=A_min, maxval=A_max)
+        A_log = jnp.log(A)
+        self.A_log = nnx.Param(A_log, rngs=rngs)
+
+        self.D = nnx.Param(jnp.ones(config.n_heads), rngs=rngs)
+
+        self.norm = nnx.LayerNorm(config.d_inner, rngs=rngs)
+        self.out_proj = nnx.Linear(
+            config.d_inner, config.d_model, use_bias=config.bias, rngs=rngs
+        )
+
+    def non_casual_linear_attn(
+        self,
+        x: jnp.ndarray,
+        dt: jnp.ndarray,
+        A: jnp.ndarray,
+        B: jnp.ndarray,
+        C: jnp.ndarray,
+        D: jnp.ndarray,
+        H: Optional[int] = None,
+        W: Optional[int] = None,
+    ):
+        """Non-casual attention duality from the VSSD paper."""
+        b, l, h, d = x.shape
+        d_state = B.shape[2]
+        V = rearrange(x, "b l h d -> b h l d")
+        dt = rearrange(dt, "b l h -> b h l")
+        dA = dt[..., None] * jnp.broadcast_to(
+            A[None, :, None, None], (b, A.shape[0], l, 1)
+        )
+
+        V_scaled = V * dA
+        K = jnp.reshape(B, (b, 1, l, d_state))
+
+        if self.config.n_groups == 1:
+            # get kv via transpose K and V
+            KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
+            Q = jnp.reshape(C, (b, 1, l, d_state))
+            x = jnp.matmul(Q, KV)
+            x = x + V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1))
+            x = rearrange(x, "b h l d -> b l h d")
+        else:
+            if h % self.config.n_groups != 0:
+                raise ValueError("h % g != 0")
+            d_state = d_state // self.config.n_groups
+            K = jnp.transpose(
+                jnp.reshape(K, (b, 1, l, self.config.n_groups, d_state)),
+                (0, 1, 3, 2, 4),
+            )
+            V_scaled = jnp.reshape(V_scaled, (b, h // self.ngroups, self.ngroups, l, d))
+            Q = jnp.transpose(
+                jnp.reshape(C, (b, 1, l, self.config.n_groups, d_state)),
+                (0, 1, 3, 2, 4),
+            )
+
+            KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
+            x = jnp.matmul(Q, KV)
+            V_skip = jnp.reshape(
+                V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1)),
+                (b, h // self.config.n_groups, self.config.n_groups, l, d),
+            )
+            x = x + V_skip
+            x = jnp.reshape(jnp.transpose(x, (0, 3, 1, 2, 4)), (b, l, h, d))
+
+        return x
+
+    def __call__(
+        self, x: jnp.ndarray, H: Optional[int] = None, W: Optional[int] = None
+    ):
+        """Forward pass of the VMamba2Mixer using non-casual attention duality.
 
         Args:
-            batch_size: batch size
-            config: MambaConfig
+            x (jnp.ndarray): Input tensor of shape (batch_size, sequence_length, d_model).
 
         Returns:
-            InferenceCache
+            jnp.ndarray: Output tensor of shape (batch_size, sequence_length, d_model).
         """
-        return InferenceCache(
-            jnp.zeros((batch_size, config.d_inner + 2 * config.d_state, config.d_conv)),
-            jnp.zeros((batch_size, config.n_heads, config.head_dim, config.d_state)),
+        batch = x.shape[0]
+
+        A = -jnp.exp(self.A_log.value)
+        zxbcdt = self.in_proj(x)
+
+        z, xbc, dt = jnp.split(
+            zxbcdt,
+            [self.config.d_inner, zxbcdt.shape[-1] - self.config.n_heads],
+            axis=-1,
         )
+
+        dt = jax.nn.softplus(dt + self.dt_bias.value)
+
+        # Pad or truncate the xbc tensor to match the conv kernel size
+        # xbc_rearranged = rearrange(xbc, "b l d -> b d l")
+        # conv_state = pad_or_truncate_to_length(xbc_rearranged, self.config.d_conv)
+
+        # apply 1d convolution and silu activation
+        xbc_conv = self.conv(xbc)
+        xbc_silu = jax.nn.silu(xbc_conv[:, : x.shape[1], :])
+
+        # split the conv state into the conv kernel and the conv state
+        x, B, C = jnp.split(xbc_silu, self.config.indices_xBC, axis=-1)
+
+        x = rearrange(x, "b l (h p) -> b l h p", p=self.config.head_dim)
+
+        if self.config.linear_attn_duality:
+            y = self.non_casual_linear_attn(
+                x, dt=dt, A=A, B=B, C=C, D=self.D.value, H=H, W=W
+            )
+        else:
+            # apply ssd function
+            # TODO: Bidirectional
+            initial_states = (
+                repeat(
+                    self.init_states.value,
+                    "h -> b c h p n",
+                    b=batch,
+                    c=x.shape[1] // self.config.chunk_size,
+                    p=x.shape[-1],
+                    n=B.shape[-1],
+                )
+                if self.config.learnable_init_states
+                else None
+            )
+            y, ssm_state = ssd(
+                x * jnp.expand_dims(dt, axis=-1),
+                A * dt,
+                rearrange(B, "b l (g n) -> b l g n", g=self.config.n_groups),
+                rearrange(C, "b l (g n) -> b l g n", g=self.config.n_groups),
+                self.config.chunk_size,
+                initial_states=initial_states,
+            )
+
+            # Combine the output of the ssd function with the input and rearrange
+            y = y + x * jnp.expand_dims(self.D.value, axis=-1)
+
+        y = rearrange(y, "b l h p -> b l (h p)")
+
+        # apply the output projection
+        if isinstance(self.norm, RMSNormGated):
+            y = self.norm(y, nnx.silu(z))
+        else:
+            # Should be LayerNorm
+            y = self.norm(y) * z
+
+        y = self.out_proj(y)
+
+        return y
 
 
 class Mamba2VisionMixer(nnx.Module):
     """Mamba2Vision Mixer.
 
-    This class implements the MambaVision Mixer using Structured State Space Duality (SSD),
-    from Mamba2 [1]. It extends the original MambaVision Mixer by incorporating SSD
-    for more efficient computation and potentially improved performance.
+    This class implements the a Mamba2Vision Mixer using State Space Duality (SSD),
+    from Mamba2 [1]. It extends the MambaVisionMixer by replacing SSM with SSD, leading to
+    enhanced efficiency, and maybe accuracy.
 
     Attributes:
         config (MambaConfig): Configuration object containing model hyperparameters.
@@ -273,22 +465,48 @@ class Mamba2VisionMixer(nnx.Module):
     ):
         self.config = config
 
-        d_in_proj = 2 * config.d_inner + 2 * config.d_state + config.n_heads
+        # d_in_proj = 2 * config.d_inner + 2 * config.d_state + config.n_heads
         self.in_proj = nnx.Linear(
-            config.d_model, d_in_proj, use_bias=config.bias, rngs=rngs
+            config.d_model, 2 * config.d_inner, use_bias=config.bias, rngs=rngs
         )
-
-        conv_dim = config.d_inner + 2 * config.d_state
-        self.conv = nnx.Conv(
-            in_features=conv_dim,
-            out_features=conv_dim,
+        self.x_proj = nnx.Linear(
+            config.d_inner,
+            config.n_heads + config.d_state * 2,
+            use_bias=False,
+            rngs=rngs,
+        )
+        self.conv1d_x = nnx.Conv(
+            in_features=config.d_inner,
+            out_features=config.d_inner,
             kernel_size=(config.d_conv,),
-            feature_group_count=conv_dim,
-            padding=[(config.d_conv - 1, config.d_conv - 1)],
+            feature_group_count=config.d_inner,
+            use_bias=config.conv_bias,
+            padding="SAME",
+            rngs=rngs,
+        )
+        self.conv1d_z = nnx.Conv(
+            in_features=config.d_inner,
+            out_features=config.d_inner,
+            kernel_size=(config.d_conv,),
+            feature_group_count=config.d_inner,
+            use_bias=config.conv_bias,
+            padding="SAME",
             rngs=rngs,
         )
 
-        self.dt_bias = nnx.Param(jnp.zeros(config.n_heads), rngs=rngs)
+        # self.in_proj = nnx.Linear(
+        #     config.d_model, d_in_proj, use_bias=config.bias, rngs=rngs
+        # )
+
+        key = rngs.params()
+        rand_vals = random.uniform(key, (config.n_heads,))
+        dt = jnp.exp(
+            rand_vals * (math.log(config.dt_max) - math.log(config.dt_min))
+            + math.log(config.dt_min)
+        )
+        dt = jnp.clip(dt, a_min=config.dt_init_floor)
+        inv_dt = dt + jnp.log(-jnp.expm1(-dt))
+        self.dt_bias = nnx.Param(inv_dt)
 
         A_min, A_max = config.A_init_range
         key = rngs.params()
@@ -298,46 +516,40 @@ class Mamba2VisionMixer(nnx.Module):
 
         self.D = nnx.Param(jnp.ones(config.n_heads), rngs=rngs)
 
-        self.norm = nnx.RMSNorm(config.d_inner, rngs=rngs)
+        self.norm = RMSNormGated(config.d_inner, rngs=rngs)
         self.out_proj = nnx.Linear(
             config.d_inner, config.d_model, use_bias=config.bias, rngs=rngs
         )
 
-    def __call__(self, x: jnp.ndarray, cache: InferenceCache | None = None):
+    def __call__(self, x: jnp.ndarray):
         """Forward pass of the MambaVisionMixer.
 
         Args:
             x (jnp.ndarray): Input tensor of shape (batch_size, sequence_length, d_model).
-            cache: hidden states for inference step. If None, hidden states are
-                initialized to zeros.
 
         Returns:
             jnp.ndarray: Output tensor of shape (batch_size, sequence_length, d_model).
         """
-        if cache:
-            return self.step(x, cache)
+        _, L, _ = x.shape
 
         A = -jnp.exp(self.A_log.value)
-        zxbcdt = self.in_proj(x)
 
-        z, xbc, dt = jnp.split(
-            zxbcdt,
-            [self.config.d_inner, zxbcdt.shape[-1] - self.config.n_heads],
+        xz = self.in_proj(x)
+        x, z = jnp.split(xz, 2, axis=-1)
+        x = nnx.silu(self.conv1d_x(x))
+        z = nnx.silu(self.conv1d_z(z))
+
+        x_dbl = self.x_proj(rearrange(x, "b l d -> (b l) d"))
+        dt, B, C = jnp.split(
+            x_dbl,
+            [self.config.n_heads, self.config.d_state + self.config.n_heads],
             axis=-1,
         )
-
+        dt = rearrange(dt, "(b l) n -> b l n", l=L)
         dt = jax.nn.softplus(dt + self.dt_bias.value)
 
-        # Pad or truncate the xbc tensor to match the conv kernel size
-        # xbc_rearranged = rearrange(xbc, "b l d -> b d l")
-        # conv_state = pad_or_truncate_to_length(xbc_rearranged, self.config.d_conv)
-
-        # apply 1d convolution and silu activation
-        xbc_conv = self.conv(xbc)
-        xbc_silu = jax.nn.silu(xbc_conv[:, : x.shape[1], :])
-
-        # split the conv state into the conv kernel and the conv state
-        x, b, c = jnp.split(xbc_silu, self.config.indices_xBC, axis=-1)
+        B = rearrange(B, "(b l) n -> b l n", l=L)
+        C = rearrange(C, "(b l) n -> b l n", l=L)
 
         x = rearrange(x, "b l (h p) -> b l h p", p=self.config.head_dim)
 
@@ -345,8 +557,8 @@ class Mamba2VisionMixer(nnx.Module):
         y, ssm_state = ssd(
             x * jnp.expand_dims(dt, axis=-1),
             A * dt,
-            rearrange(b, "b l n -> b l 1 n"),
-            rearrange(c, "b l n -> b l 1 n"),
+            rearrange(B, "b l n -> b l 1 n"),
+            rearrange(C, "b l n -> b l 1 n"),
             self.config.chunk_size,
         )
 
@@ -355,94 +567,10 @@ class Mamba2VisionMixer(nnx.Module):
         y = rearrange(y, "b l h p -> b l (h p)")
 
         # apply the output projection
+        y = self.norm(y, z)
         y = self.out_proj(y)
 
-        # hidden_state = InferenceCache(conv_state, ssm_state)
-        # return y, hidden_state
         return y
-
-    def step(
-        self, x: jnp.ndarray, cache: InferenceCache
-    ) -> tuple[jnp.ndarray, InferenceCache]:
-        """Forward pass through a single step of the Mamba layer.
-
-        This function implements a single step of the Mamba layer, which consists
-        of a projection, a depthwise convolution, and an SSD function. It takes in
-        the input tensor, x, and the hidden states, cache, and returns the output
-        tensor, y, and the updated hidden states. The hidden states are updated
-        using the SSD function. This function is used when the hidden states are
-        provided.
-
-        Args:
-            x (batch_size, 1, d_model): input tensor
-            cache: hidden states for inference step. If None, hidden states are
-                initialized to zeros.
-
-        Returns:
-            output tensor of shape (batch_size, 1, d_model) and updated hidden
-            states.
-        """
-        assert x.shape[1] == 1, "Only supports single token inputs"
-
-        # Squeeze dimension 1 from x
-        x_squeezed = jnp.squeeze(x, axis=1)
-
-        # Project input using in_proj
-        zxbcdt = self.in_proj(x_squeezed)  # (batch, d_in_proj)
-
-        # Split zxbcdt into z, xBC, and dt
-        sizes = [
-            self.config.d_inner,
-            self.config.d_inner + 2 * self.config.d_state,
-            self.config.n_heads,
-        ]
-        indices = jnp.cumsum(jnp.array(sizes))[:-1]
-        z, xBC, dt = jnp.split(zxbcdt, indices, axis=-1)
-
-        conv_state = cache.conv_state
-        ssm_state = cache.ssm_state
-
-        # Advance convolution input
-        conv_state = jnp.roll(conv_state, shift=-1, axis=-1)
-        conv_state = conv_state.at[:, :, -1].set(xBC)
-
-        # Convolution step
-        conv_weight_rearranged = rearrange(self.conv.layer.kernel, "d 1 w -> d w")
-        xBC = jnp.sum(conv_state * conv_weight_rearranged, axis=-1)
-        xBC += self.conv.layer.bias
-        xBC = jax.nn.silu(xBC)
-
-        # Split xBC into x, B, and C
-        x, B, C = jnp.split(xBC, self.config.indices_xBC, axis=-1)
-
-        # Exponential of A_log
-        A = -jnp.exp(self.A_log.value)  # (nheads,)
-
-        # SSM step
-        dt = jax.nn.softplus(dt + self.dt_bias)  # (batch, nheads)
-        dA = jnp.exp(dt * A)  # (batch, nheads)
-
-        # Rearrange x
-        x = rearrange(x, "b (h p) -> b h p", p=self.config.head_dim)
-
-        # Compute dBx
-        dBx = jnp.einsum("bh, bn, bhp -> bhpn", dt, B, x)
-
-        # Update ssm_state
-        ssm_state = ssm_state * rearrange(dA, "b h -> b h 1 1") + dBx
-
-        # Compute y
-        y = jnp.einsum("bhpn, bn -> bhp", ssm_state, C)
-        y = y + rearrange(self.D, "h -> h 1") * x
-
-        # Rearrange y
-        y = rearrange(y, "b h p -> b (h p)")
-
-        # Apply normalization and output projection
-        # y = self.norm(y, z)
-        y = self.out_proj(y)
-
-        return y, InferenceCache(conv_state, ssm_state)
 
 
 class MambaVisionLayer(nnx.Module):

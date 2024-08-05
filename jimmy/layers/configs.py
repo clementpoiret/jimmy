@@ -47,10 +47,13 @@ class MambaConfig:
     dt_init = "random"
     dt_scale: float = 1.0
     dt_init_floor: float = 1e-4
+    n_groups: int = 1
+    learnable_init_states: bool = False
     expand: int = 2
     head_dim: int = 64
     chunk_size: int = 64
     A_init_range: Tuple[int, int] = (1, 16)
+    linear_attn_duality: bool = True
     use_fast_path: bool = True
     layer_idx: int | None = (None,)
     bias: bool = False
@@ -62,11 +65,21 @@ class MambaConfig:
         self.d_inner = int(self.d_model * self.expand)
         assert self.d_inner % self.head_dim == 0
 
+        if self.n_groups == -1:
+            self.n_groups = (
+                self.d_inner // self.headdim
+            )  # equivalent to multi-head attention
+
         # Mamba-2
         A_min, A_max = self.A_init_range
         assert 0 < A_min < A_max
         self.n_heads = self.d_inner // self.head_dim
-        self.indices_xBC = [self.d_inner, self.d_inner + self.d_state]
+        self.indices_xBC = [self.d_inner, self.d_inner + self.n_groups * self.d_state]
+        # self.indices_xBC = [
+        #     self.d_inner,
+        #     self.n_groups * self.d_state,
+        #     self.n_groups * self.d_state,
+        # ]
 
         # Mamba-1
         self.dt_rank = (
