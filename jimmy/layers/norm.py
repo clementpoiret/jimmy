@@ -6,6 +6,7 @@ from jax import lax
 
 
 class RMSNormGated(nnx.Module):
+
     def __init__(self, d: int, eps: float = 1e-5, rngs: nnx.Rngs = None):
         self.eps = eps
         self.w = nnx.Param(nnx.initializers.ones(rngs.params(), [d]))

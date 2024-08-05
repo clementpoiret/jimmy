@@ -23,7 +23,10 @@ from .norm import RMSNormGated
 class Downsample(nnx.Module):
     """Downsampling block for reducing spatial dimensions of feature maps."""
 
-    def __init__(self, dim: int, keep_dim: bool = False, rngs: nnx.Rngs = None):
+    def __init__(self,
+                 dim: int,
+                 keep_dim: bool = False,
+                 rngs: nnx.Rngs = None):
         """Initialize the Downsample block.
 
         Args:
@@ -93,9 +96,10 @@ class MambaVisionMixer(nnx.Module):
     ):
         self.config = config
 
-        self.in_proj = nnx.Linear(
-            config.d_model, config.d_inner, use_bias=config.bias, rngs=rngs
-        )
+        self.in_proj = nnx.Linear(config.d_model,
+                                  config.d_inner,
+                                  use_bias=config.bias,
+                                  rngs=rngs)
         self.x_proj = nnx.Linear(
             config.d_inner // 2,
             config.dt_rank + config.d_state * 2,
@@ -112,11 +116,10 @@ class MambaVisionMixer(nnx.Module):
             raise NotImplementedError
 
         key = rngs.params()
-        rand_vals = random.uniform(key, (config.d_inner // 2,))
-        dt = jnp.exp(
-            rand_vals * (math.log(config.dt_max) - math.log(config.dt_min))
-            + math.log(config.dt_min)
-        )
+        rand_vals = random.uniform(key, (config.d_inner // 2, ))
+        dt = jnp.exp(rand_vals *
+                     (math.log(config.dt_max) - math.log(config.dt_min)) +
+                     math.log(config.dt_min))
         dt = jnp.clip(dt, a_min=config.dt_init_floor)
 
         inv_dt = dt + jnp.log(-jnp.expm1(-dt))
@@ -135,16 +138,18 @@ class MambaVisionMixer(nnx.Module):
 
         A_log = jnp.log(A)
         self.A_log = nnx.Param(A_log)
-        self.D = nnx.Param(nnx.initializers.ones(rngs.params(), [config.d_inner // 2]))
+        self.D = nnx.Param(
+            nnx.initializers.ones(rngs.params(), [config.d_inner // 2]))
 
-        self.out_proj = nnx.Linear(
-            config.d_inner, config.d_model, use_bias=True, rngs=rngs
-        )
+        self.out_proj = nnx.Linear(config.d_inner,
+                                   config.d_model,
+                                   use_bias=True,
+                                   rngs=rngs)
 
         self.conv1d_x = nnx.Conv(
             in_features=config.d_inner // 2,
             out_features=config.d_inner // 2,
-            kernel_size=(config.d_conv,),
+            kernel_size=(config.d_conv, ),
             feature_group_count=config.d_inner // 2,
             use_bias=config.conv_bias,
             padding="SAME",
@@ -153,7 +158,7 @@ class MambaVisionMixer(nnx.Module):
         self.conv1d_z = nnx.Conv(
             in_features=config.d_inner // 2,
             out_features=config.d_inner // 2,
-            kernel_size=(config.d_conv,),
+            kernel_size=(config.d_conv, ),
             feature_group_count=config.d_inner // 2,
             use_bias=config.conv_bias,
             padding="SAME",
@@ -247,18 +252,18 @@ class Mamba2Mixer(nnx.Module):
     ):
         self.config = config
 
-        d_in_proj = (
-            2 * config.d_inner + 2 * config.n_groups * config.d_state + config.n_heads
-        )
-        self.in_proj = nnx.Linear(
-            config.d_model, d_in_proj, use_bias=config.bias, rngs=rngs
-        )
+        d_in_proj = (2 * config.d_inner +
+                     2 * config.n_groups * config.d_state + config.n_heads)
+        self.in_proj = nnx.Linear(config.d_model,
+                                  d_in_proj,
+                                  use_bias=config.bias,
+                                  rngs=rngs)
 
         conv_dim = config.d_inner + 2 * config.n_groups * config.d_state
         self.conv = nnx.Conv(
             in_features=conv_dim,
             out_features=conv_dim,
-            kernel_size=(config.d_conv,),
+            kernel_size=(config.d_conv, ),
             feature_group_count=conv_dim,
             padding=[((config.d_conv - 1) // 2, (config.d_conv - 1) // 2)],
             use_bias=config.conv_bias,
@@ -269,27 +274,27 @@ class Mamba2Mixer(nnx.Module):
             self.init_states = nnx.Param(jnp.ones(config.n_heads), rngs=rngs)
 
         key = rngs.params()
-        rand_vals = random.uniform(key, (config.n_heads,))
-        dt = jnp.exp(
-            rand_vals * (math.log(config.dt_max) - math.log(config.dt_min))
-            + math.log(config.dt_min)
-        )
+        rand_vals = random.uniform(key, (config.n_heads, ))
+        dt = jnp.exp(rand_vals *
+                     (math.log(config.dt_max) - math.log(config.dt_min)) +
+                     math.log(config.dt_min))
         dt = jnp.clip(dt, a_min=config.dt_init_floor)
         inv_dt = dt + jnp.log(-jnp.expm1(-dt))
         self.dt_bias = nnx.Param(inv_dt, rngs=rngs)
 
         A_min, A_max = config.A_init_range
         key = rngs.params()
-        A = random.uniform(key, (config.n_heads,), minval=A_min, maxval=A_max)
+        A = random.uniform(key, (config.n_heads, ), minval=A_min, maxval=A_max)
         A_log = jnp.log(A)
         self.A_log = nnx.Param(A_log, rngs=rngs)
 
         self.D = nnx.Param(jnp.ones(config.n_heads), rngs=rngs)
 
         self.norm = nnx.LayerNorm(config.d_inner, rngs=rngs)
-        self.out_proj = nnx.Linear(
-            config.d_inner, config.d_model, use_bias=config.bias, rngs=rngs
-        )
+        self.out_proj = nnx.Linear(config.d_inner,
+                                   config.d_model,
+                                   use_bias=config.bias,
+                                   rngs=rngs)
 
     def non_casual_linear_attn(
         self,
@@ -305,9 +310,8 @@ class Mamba2Mixer(nnx.Module):
         d_state = B.shape[2]
         V = rearrange(x, "b l h d -> b h l d")
         dt = rearrange(dt, "b l h -> b h l")
-        dA = dt[..., None] * jnp.broadcast_to(
-            A[None, :, None, None], (b, A.shape[0], l, 1)
-        )
+        dA = dt[..., None] * jnp.broadcast_to(A[None, :, None, None],
+                                              (b, A.shape[0], l, 1))
 
         V_scaled = V * dA
         K = jnp.reshape(B, (b, 1, l, d_state))
@@ -317,7 +321,8 @@ class Mamba2Mixer(nnx.Module):
             KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
             Q = jnp.reshape(C, (b, 1, l, d_state))
             x = jnp.matmul(Q, KV)
-            x = x + V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1))
+            x = x + V * jnp.broadcast_to(D[None, :, None, None],
+                                         (b, D.shape[0], l, 1))
             x = rearrange(x, "b h l d -> b l h d")
         else:
             if h % self.config.n_groups != 0:
@@ -327,7 +332,8 @@ class Mamba2Mixer(nnx.Module):
                 jnp.reshape(K, (b, 1, l, self.config.n_groups, d_state)),
                 (0, 1, 3, 2, 4),
             )
-            V_scaled = jnp.reshape(V_scaled, (b, h // self.ngroups, self.ngroups, l, d))
+            V_scaled = jnp.reshape(V_scaled,
+                                   (b, h // self.ngroups, self.ngroups, l, d))
             Q = jnp.transpose(
                 jnp.reshape(C, (b, 1, l, self.config.n_groups, d_state)),
                 (0, 1, 3, 2, 4),
@@ -336,7 +342,8 @@ class Mamba2Mixer(nnx.Module):
             KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
             x = jnp.matmul(Q, KV)
             V_skip = jnp.reshape(
-                V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1)),
+                V * jnp.broadcast_to(D[None, :, None, None],
+                                     (b, D.shape[0], l, 1)),
                 (b, h // self.config.n_groups, self.config.n_groups, l, d),
             )
             x = x + V_skip
@@ -372,7 +379,7 @@ class Mamba2Mixer(nnx.Module):
 
         # apply 1d convolution and silu activation
         xbc_conv = self.conv(xbc)
-        xbc_silu = jax.nn.silu(xbc_conv[:, : x.shape[1], :])
+        xbc_silu = jax.nn.silu(xbc_conv[:, :x.shape[1], :])
 
         # split the conv state into the conv kernel and the conv state
         x, B, C = jnp.split(xbc_silu, self.config.indices_xBC, axis=-1)
@@ -380,22 +387,23 @@ class Mamba2Mixer(nnx.Module):
         x = rearrange(x, "b l (h p) -> b l h p", p=self.config.head_dim)
 
         if self.config.linear_attn_duality:
-            y = self.non_casual_linear_attn(x, dt=dt, A=A, B=B, C=C, D=self.D.value)
+            y = self.non_casual_linear_attn(x,
+                                            dt=dt,
+                                            A=A,
+                                            B=B,
+                                            C=C,
+                                            D=self.D.value)
         else:
             # apply ssd function
             # TODO: Bidirectional
-            initial_states = (
-                repeat(
-                    self.init_states.value,
-                    "h -> b c h p n",
-                    b=batch,
-                    c=x.shape[1] // self.config.chunk_size,
-                    p=x.shape[-1],
-                    n=B.shape[-1],
-                )
-                if self.config.learnable_init_states
-                else None
-            )
+            initial_states = (repeat(
+                self.init_states.value,
+                "h -> b c h p n",
+                b=batch,
+                c=x.shape[1] // self.config.chunk_size,
+                p=x.shape[-1],
+                n=B.shape[-1],
+            ) if self.config.learnable_init_states else None)
             y, ssm_state = ssd(
                 x * jnp.expand_dims(dt, axis=-1),
                 A * dt,
@@ -460,9 +468,10 @@ class Mamba2VisionMixer(nnx.Module):
         self.config = config
 
         # d_in_proj = 2 * config.d_inner + 2 * config.d_state + config.n_heads
-        self.in_proj = nnx.Linear(
-            config.d_model, 2 * config.d_inner, use_bias=config.bias, rngs=rngs
-        )
+        self.in_proj = nnx.Linear(config.d_model,
+                                  2 * config.d_inner,
+                                  use_bias=config.bias,
+                                  rngs=rngs)
         self.x_proj = nnx.Linear(
             config.d_inner,
             config.n_heads + config.d_state * 2,
@@ -472,7 +481,7 @@ class Mamba2VisionMixer(nnx.Module):
         self.conv1d_x = nnx.Conv(
             in_features=config.d_inner,
             out_features=config.d_inner,
-            kernel_size=(config.d_conv,),
+            kernel_size=(config.d_conv, ),
             feature_group_count=config.d_inner,
             use_bias=config.conv_bias,
             padding="SAME",
@@ -481,7 +490,7 @@ class Mamba2VisionMixer(nnx.Module):
         self.conv1d_z = nnx.Conv(
             in_features=config.d_inner,
             out_features=config.d_inner,
-            kernel_size=(config.d_conv,),
+            kernel_size=(config.d_conv, ),
             feature_group_count=config.d_inner,
             use_bias=config.conv_bias,
             padding="SAME",
@@ -493,27 +502,27 @@ class Mamba2VisionMixer(nnx.Module):
         # )
 
         key = rngs.params()
-        rand_vals = random.uniform(key, (config.n_heads,))
-        dt = jnp.exp(
-            rand_vals * (math.log(config.dt_max) - math.log(config.dt_min))
-            + math.log(config.dt_min)
-        )
+        rand_vals = random.uniform(key, (config.n_heads, ))
+        dt = jnp.exp(rand_vals *
+                     (math.log(config.dt_max) - math.log(config.dt_min)) +
+                     math.log(config.dt_min))
         dt = jnp.clip(dt, a_min=config.dt_init_floor)
         inv_dt = dt + jnp.log(-jnp.expm1(-dt))
         self.dt_bias = nnx.Param(inv_dt)
 
         A_min, A_max = config.A_init_range
         key = rngs.params()
-        A = random.uniform(key, (config.n_heads,), minval=A_min, maxval=A_max)
+        A = random.uniform(key, (config.n_heads, ), minval=A_min, maxval=A_max)
         A_log = jnp.log(A)
         self.A_log = nnx.Param(A_log, rngs=rngs)
 
         self.D = nnx.Param(jnp.ones(config.n_heads), rngs=rngs)
 
         self.norm = RMSNormGated(config.d_inner, rngs=rngs)
-        self.out_proj = nnx.Linear(
-            config.d_inner, config.d_model, use_bias=config.bias, rngs=rngs
-        )
+        self.out_proj = nnx.Linear(config.d_inner,
+                                   config.d_model,
+                                   use_bias=config.bias,
+                                   rngs=rngs)
 
     def __call__(self, x: jnp.ndarray):
         """Forward pass of the MambaVisionMixer.
@@ -640,13 +649,11 @@ class MambaVisionLayer(nnx.Module):
             self.blocks = [
                 ConvBlock(
                     dim=dim,
-                    drop_path=(
-                        drop_path[i] if isinstance(drop_path, list) else drop_path
-                    ),
+                    drop_path=(drop_path[i]
+                               if isinstance(drop_path, list) else drop_path),
                     init_values=init_values_conv,
                     rngs=rngs,
-                )
-                for i in range(depth)
+                ) for i in range(depth)
             ]
             self.transformer_block = False
         else:
@@ -663,32 +670,31 @@ class MambaVisionLayer(nnx.Module):
                     proj_drop=proj_drop,
                     attn_drop=attn_drop,
                     init_values=init_values,
-                    drop_path=(
-                        drop_path[i] if isinstance(drop_path, list) else drop_path
-                    ),
-                    attention=(
-                        transformer_attention
-                        if block_type == transformer_attention.__name__
-                        else mamba_mixer
-                    ),
+                    drop_path=(drop_path[i]
+                               if isinstance(drop_path, list) else drop_path),
+                    attention=(transformer_attention
+                               if block_type == transformer_attention.__name__
+                               else mamba_mixer),
                     act_layer=act_layer,
                     norm_layer=norm_layer,
                     ffn_layer=ffn_layer,
                     rngs=rngs,
-                )
-                for i, block_type in enumerate(block_types)
+                ) for i, block_type in enumerate(block_types)
             ]
             self.transformer_block = True
 
-        self.downsample = None if not downsample else Downsample(dim=dim, rngs=rngs)
+        self.downsample = None if not downsample else Downsample(dim=dim,
+                                                                 rngs=rngs)
         self.do_gt = False
         self.window_size = window_size
 
     def __call__(self, x: jnp.ndarray):
         _, H, W, _ = x.shape
         if self.transformer_block:
-            pad_r = (self.window_size - W % self.window_size) % self.window_size
-            pad_b = (self.window_size - H % self.window_size) % self.window_size
+            pad_r = (self.window_size -
+                     W % self.window_size) % self.window_size
+            pad_b = (self.window_size -
+                     H % self.window_size) % self.window_size
             if pad_r > 0 or pad_b > 0:
                 x = jnp.pad(x, ((0, 0), (0, pad_b), (0, pad_r), (0, 0)))
                 _, Hp, Wp, _ = x.shape
@@ -752,7 +758,8 @@ class VMamba2Layer(nnx.Module):
                 proj_drop=proj_drop,
                 attn_drop=attn_drop,
                 init_values=init_values,
-                drop_path=(drop_path[i] if isinstance(drop_path, list) else drop_path),
+                drop_path=(drop_path[i]
+                           if isinstance(drop_path, list) else drop_path),
                 attention=mamba_mixer,
                 act_layer=act_layer,
                 norm_layer=norm_layer,
@@ -762,11 +769,11 @@ class VMamba2Layer(nnx.Module):
                 expand=expand,
                 chunk_size=chunk_size,
                 rngs=rngs,
-            )
-            for i in range(depth)
+            ) for i in range(depth)
         ]
 
-        self.downsample = downsample(dim=dim) if downsample is not None else None
+        self.downsample = downsample(
+            dim=dim) if downsample is not None else None
 
     def __call__(self, x: jnp.ndarray):
         for blk in self.blocks:

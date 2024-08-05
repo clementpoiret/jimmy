@@ -4,19 +4,10 @@ import jax.numpy as jnp
 from einops import reduce
 from flax import nnx
 
-from jimmy.layers import (
-    Attention,
-    ConvPatchEmbed,
-    ConvStem,
-    Identity,
-    MambaVisionLayer,
-    MambaVisionMixer,
-    Mlp,
-    PatchMerging,
-    SimpleConvStem,
-    SimplePatchMerging,
-    VMamba2Layer,
-)
+from jimmy.layers import (Attention, ConvPatchEmbed, ConvStem, Identity,
+                          MambaVisionLayer, MambaVisionMixer, Mlp,
+                          PatchMerging, SimpleConvStem, SimplePatchMerging,
+                          VMamba2Layer)
 
 
 def adaptive_avg_pool2d(x: jnp.ndarray):
@@ -90,15 +81,16 @@ class MambaVision(nnx.Module):
         num_classes: int = 1000,
         rngs: nnx.Rngs = None,
     ):
-        num_features = int(dim * 2 ** (len(depths) - 1))
+        num_features = int(dim * 2**(len(depths) - 1))
         self.num_classes = num_classes
 
         self.transformer_block_name = transformer_attention.__name__
         self.mamba_block_name = mamba_mixer.__name__
 
-        self.patch_embed = ConvPatchEmbed(
-            in_features=in_features, hidden_features=in_dim, out_features=dim, rngs=rngs
-        )
+        self.patch_embed = ConvPatchEmbed(in_features=in_features,
+                                          hidden_features=in_dim,
+                                          out_features=dim,
+                                          rngs=rngs)
         dpr = list(jnp.linspace(0, drop_path_rate, sum(depths)))
 
         self.levels = []
@@ -118,7 +110,7 @@ class MambaVision(nnx.Module):
                 proj_bias=proj_bias,
                 proj_drop=proj_drop,
                 attn_drop=attn_drop,
-                drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
+                drop_path=dpr[sum(depths[:i]):sum(depths[:i + 1])],
                 init_values=init_values,
                 init_values_conv=init_values_conv,
                 transformer_attention=transformer_attention,
@@ -132,11 +124,8 @@ class MambaVision(nnx.Module):
             self.levels.append(level)
 
         self.norm = nnx.BatchNorm(num_features=num_features, rngs=rngs)
-        self.head = (
-            nnx.Linear(num_features, num_classes, rngs=rngs)
-            if num_classes
-            else Identity()
-        )
+        self.head = (nnx.Linear(num_features, num_classes, rngs=rngs)
+                     if num_classes else Identity())
 
     def _get_block_types(self, l: int):
         """
@@ -191,6 +180,7 @@ class MambaVision(nnx.Module):
 
 
 class VMamba2(nnx.Module):
+
     def __init__(
         self,
         patch_size: int = 4,
@@ -224,7 +214,7 @@ class VMamba2(nnx.Module):
         rngs: nnx.Rngs = None,
     ):
         self.num_layers = len(depths)
-        num_features = int(embed_dim * 2 ** (self.num_layers - 1))
+        num_features = int(embed_dim * 2**(self.num_layers - 1))
 
         stem = SimpleConvStem if simple_patch_embed else ConvStem
         self.patch_embed = stem(
@@ -251,7 +241,7 @@ class VMamba2(nnx.Module):
                 proj_bias=proj_bias,
                 proj_drop=proj_drop,
                 attn_drop=attn_drop,
-                drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
+                drop_path=dpr[sum(depths[:i]):sum(depths[:i + 1])],
                 linear_attn_duality=linear_attn_duality,
                 d_state=d_state,
                 expand=expand,
@@ -259,8 +249,7 @@ class VMamba2(nnx.Module):
                 norm_layer=norm_layer,
                 downsample=patch_merging_block,
                 rngs=rngs,
-            )
-            for i in range(self.num_layers)
+            ) for i in range(self.num_layers)
         ]
 
         self.norm = norm_layer(self.num_features)
