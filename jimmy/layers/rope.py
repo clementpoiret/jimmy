@@ -26,9 +26,8 @@ class RoPE(nnx.Module):
         angles = jnp.concatenate(
             [
                 t[..., None] * theta_ks
-                for t in jnp.meshgrid(
-                    *[jnp.arange(d) for d in channel_dims], indexing="ij"
-                )
+                for t in jnp.meshgrid(*[jnp.arange(d) for d in channel_dims],
+                                      indexing="ij")
             ],
             axis=-1,
         )
@@ -37,8 +36,8 @@ class RoPE(nnx.Module):
         rotations_re = jnp.cos(angles)
         rotations_im = jnp.sin(angles)
         self.rotations = self.param(
-            "rotations", lambda _: jnp.stack([rotations_re, rotations_im], axis=-1)
-        )
+            "rotations",
+            lambda _: jnp.stack([rotations_re, rotations_im], axis=-1))
 
     def __call__(self, x: jnp.ndarray):
         dtype = x.dtype
@@ -49,7 +48,8 @@ class RoPE(nnx.Module):
         x_complex = x_reshaped[..., 0] + 1j * x_reshaped[..., 1]
 
         # Apply rotation
-        rotations_complex = self.rotations[..., 0] + 1j * self.rotations[..., 1]
+        rotations_complex = self.rotations[...,
+                                           0] + 1j * self.rotations[..., 1]
         pe_x = rotations_complex * x_complex
 
         # Convert back to real representation
