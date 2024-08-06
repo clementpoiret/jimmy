@@ -223,8 +223,8 @@ class VMamba2(nnx.Module):
         ],
         rngs: nnx.Rngs = None,
     ):
-        self.num_layers = len(depths)
-        num_features = int(embed_dim * 2 ** (self.num_layers - 1))
+        num_layers = len(depths)
+        num_features = int(embed_dim * 2 ** (num_layers - 1))
 
         stem = SimpleConvStem if simple_patch_embed else ConvStem
         self.patch_embed = stem(
@@ -252,25 +252,26 @@ class VMamba2(nnx.Module):
                 proj_drop=proj_drop,
                 attn_drop=attn_drop,
                 drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
+                block_type=block_types[i],
                 linear_attn_duality=linear_attn_duality,
                 d_state=d_state,
                 expand=expand,
                 chunk_size=chunk_size,
                 norm_layer=norm_layer,
-                downsample=patch_merging_block,
+                downsample=patch_merging_block if i < num_layers - 1 else None,
                 rngs=rngs,
             )
-            for i in range(self.num_layers)
+            for i in range(num_layers)
         ]
 
-        self.norm = norm_layer(self.num_features)
-        self.head = nnx.Linear(self.num_features, num_classes, rngs=rngs)
+        self.norm = norm_layer(num_features, rngs=rngs)
+        self.head = nnx.Linear(num_features, num_classes, rngs=rngs)
 
     def forward_features(self, x: jnp.ndarray):
         x = self.patch_embed(x)
         x = self.pos_drop(x)
 
-        for level in self.levels:
+        for i, level in enumerate(self.levels):
             x = level(x)
 
         x = reduce(self.norm(x), "b l c -> b c", "mean")

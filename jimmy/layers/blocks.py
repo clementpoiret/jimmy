@@ -467,9 +467,20 @@ class VMamba2Block(nnx.Module):
         self.ls1 = (
             LayerScale(dim, init_values, rngs=rngs) if init_values else Identity()
         )
-        self.drop_path1 = (
-            DropPath(drop_path, rngs=rngs) if drop_path > 0.0 else Identity()
-        )
+
+        if isinstance(drop_path, list):
+            if len(drop_path) != 2:
+                raise AssertionError(
+                    f"`drop_path` needs to have 2 elements, got {len(drop_path)}."
+                )
+            dr1, dr2 = drop_path
+            dr1 = float(dr1)
+            dr2 = float(dr2)
+        else:
+            dr1 = dr2 = float(drop_path)
+
+        self.drop_path1 = DropPath(dr1, rngs=rngs) if dr1 > 0.0 else Identity()
+
         self.cpe2 = nnx.Conv(
             in_features=dim,
             out_features=dim,
@@ -490,6 +501,8 @@ class VMamba2Block(nnx.Module):
             bias=ffn_bias,
             rngs=rngs,
         )
+
+        self.drop_path2 = DropPath(dr2, rngs=rngs) if dr2 > 0.0 else Identity()
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
@@ -517,6 +530,6 @@ class VMamba2Block(nnx.Module):
             "b h w c -> b (h w) c",
         )
 
-        x += self.drop_path1(self.mlp(self.norm2(x)))
+        x += self.drop_path2(self.mlp(self.norm2(x)))
 
         return x

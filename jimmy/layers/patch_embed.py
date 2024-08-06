@@ -226,10 +226,10 @@ class Conv(nnx.Module):
     ):
         self.dropout = nnx.Dropout(dropout, rngs=rngs) if dropout > 0 else None
         self.conv = nnx.Conv(
-            in_features=in_features,
-            out_features=out_features,
-            kernel_size=(kernel_size, kernel_size),
-            strides=(stride, stride),
+            in_features=int(in_features),
+            out_features=int(out_features),
+            kernel_size=(int(kernel_size), int(kernel_size)),
+            strides=(int(stride), int(stride)),
             padding=padding,
             use_bias=bias,
             feature_group_count=groups,
@@ -289,48 +289,50 @@ class ConvStem(nnx.Module):
         rngs: nnx.Rngs = None,
     ):
         self.conv1 = Conv(
-            in_features, embed_dim // 2, kernel_size=3, stride=2, padding=1, bias=False
+            in_features,
+            embed_dim // 2,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
+            rngs=rngs,
         )
         self.conv2 = nnx.Sequential(
-            [
-                Conv(
-                    embed_dim // 2,
-                    embed_dim // 2,
-                    kernel_size=3,
-                    stride=1,
-                    bias=False,
-                    rngs=rngs,
-                ),
-                Conv(
-                    embed_dim // 2,
-                    embed_dim // 2,
-                    kernel_size=3,
-                    stride=1,
-                    bias=False,
-                    act=None,
-                    rngs=rngs,
-                ),
-            ]
+            Conv(
+                embed_dim // 2,
+                embed_dim // 2,
+                kernel_size=3,
+                stride=1,
+                bias=False,
+                rngs=rngs,
+            ),
+            Conv(
+                embed_dim // 2,
+                embed_dim // 2,
+                kernel_size=3,
+                stride=1,
+                bias=False,
+                act=None,
+                rngs=rngs,
+            ),
         )
         self.conv3 = nnx.Sequential(
-            [
-                Conv(
-                    embed_dim // 2,
-                    embed_dim * 4,
-                    kernel_size=3,
-                    stride=2,
-                    bias=False,
-                    rngs=rngs,
-                ),
-                Conv(
-                    embed_dim * 4,
-                    embed_dim,
-                    kernel_size=1,
-                    bias=False,
-                    act=None,
-                    rngs=rngs,
-                ),
-            ]
+            Conv(
+                embed_dim // 2,
+                embed_dim * 4,
+                kernel_size=3,
+                stride=2,
+                bias=False,
+                rngs=rngs,
+            ),
+            Conv(
+                embed_dim * 4,
+                embed_dim,
+                kernel_size=1,
+                bias=False,
+                act=None,
+                rngs=rngs,
+            ),
         )
 
     def __call__(self, x: jnp.ndarray):
@@ -376,31 +378,29 @@ class PatchMerging(nnx.Module):
         rngs: nnx.Rngs = None,
     ):
         self.conv = nnx.Sequential(
-            [
-                Conv(
-                    dim,
-                    2 * dim * ratio,
-                    kernel_size=1,
-                    norm=None,
-                    rngs=rngs,
-                ),
-                Conv(
-                    2 * dim * ratio,
-                    2 * dim * ratio,
-                    kernel_size=3,
-                    stride=2,
-                    groups=int(2 * dim * ratio),
-                    norm=None,
-                    rngs=rngs,
-                ),
-                Conv(
-                    2 * dim * ratio,
-                    2 * dim,
-                    kernel_size=1,
-                    act=None,
-                    rngs=rngs,
-                ),
-            ]
+            Conv(
+                dim,
+                2 * dim * ratio,
+                kernel_size=1,
+                norm=None,
+                rngs=rngs,
+            ),
+            Conv(
+                2 * dim * ratio,
+                2 * dim * ratio,
+                kernel_size=3,
+                stride=2,
+                groups=int(2 * dim * ratio),
+                norm=None,
+                rngs=rngs,
+            ),
+            Conv(
+                2 * dim * ratio,
+                2 * dim,
+                kernel_size=1,
+                act=None,
+                rngs=rngs,
+            ),
         )
 
     def __call__(self, x: jnp.ndarray):

@@ -194,3 +194,55 @@ def ssd(
     Y = rearrange(Y_diag + Y_off, "b c l h p -> b (c l) h p")
 
     return Y, final_state
+
+
+def non_casual_linear_attn(
+    x: jnp.ndarray,
+    dt: jnp.ndarray,
+    A: jnp.ndarray,
+    B: jnp.ndarray,
+    C: jnp.ndarray,
+    D: jnp.ndarray,
+    n_groups: int = 1,
+):
+    """Non-casual attention duality from the VSSD paper."""
+    b, l, h, d = x.shape
+    d_state = B.shape[2]
+    V = rearrange(x, "b l h d -> b h l d")
+    dt = rearrange(dt, "b l h -> b h l")
+    dA = dt[..., None] * jnp.broadcast_to(A[None, :, None, None], (b, A.shape[0], l, 1))
+
+    V_scaled = V * dA
+    K = jnp.reshape(B, (b, 1, l, d_state))
+
+    if n_groups == 1:
+        # get kv via transpose K and V
+        KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
+        Q = jnp.reshape(C, (b, 1, l, d_state))
+        x = jnp.matmul(Q, KV)
+        x = x + V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1))
+        x = rearrange(x, "b h l d -> b l h d")
+    else:
+        if h % n_groups != 0:
+            raise ValueError("h % g != 0")
+        d_state = d_state // n_groups
+        K = jnp.transpose(
+            jnp.reshape(K, (b, 1, l, n_groups, d_state)),
+            (0, 1, 3, 2, 4),
+        )
+        V_scaled = jnp.reshape(V_scaled, (b, h // n_groups, n_groups, l, d))
+        Q = jnp.transpose(
+            jnp.reshape(C, (b, 1, l, n_groups, d_state)),
+            (0, 1, 3, 2, 4),
+        )
+
+        KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
+        x = jnp.matmul(Q, KV)
+        V_skip = jnp.reshape(
+            V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1)),
+            (b, h // n_groups, n_groups, l, d),
+        )
+        x = x + V_skip
+        x = jnp.reshape(jnp.transpose(x, (0, 3, 1, 2, 4)), (b, l, h, d))
+
+    return x

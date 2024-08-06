@@ -7,7 +7,7 @@ from einops import rearrange, repeat
 from flax import nnx
 from jax import random
 
-from jimmy.ops.scan import selective_scan, ssd
+from jimmy.ops.scan import non_casual_linear_attn, selective_scan, ssd
 from jimmy.utils import custom_uniform, window_partition, window_reverse
 
 from .attention import Attention
@@ -291,59 +291,6 @@ class Mamba2Mixer(nnx.Module):
             config.d_inner, config.d_model, use_bias=config.bias, rngs=rngs
         )
 
-    def non_casual_linear_attn(
-        self,
-        x: jnp.ndarray,
-        dt: jnp.ndarray,
-        A: jnp.ndarray,
-        B: jnp.ndarray,
-        C: jnp.ndarray,
-        D: jnp.ndarray,
-    ):
-        """Non-casual attention duality from the VSSD paper."""
-        b, l, h, d = x.shape
-        d_state = B.shape[2]
-        V = rearrange(x, "b l h d -> b h l d")
-        dt = rearrange(dt, "b l h -> b h l")
-        dA = dt[..., None] * jnp.broadcast_to(
-            A[None, :, None, None], (b, A.shape[0], l, 1)
-        )
-
-        V_scaled = V * dA
-        K = jnp.reshape(B, (b, 1, l, d_state))
-
-        if self.config.n_groups == 1:
-            # get kv via transpose K and V
-            KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
-            Q = jnp.reshape(C, (b, 1, l, d_state))
-            x = jnp.matmul(Q, KV)
-            x = x + V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1))
-            x = rearrange(x, "b h l d -> b l h d")
-        else:
-            if h % self.config.n_groups != 0:
-                raise ValueError("h % g != 0")
-            d_state = d_state // self.config.n_groups
-            K = jnp.transpose(
-                jnp.reshape(K, (b, 1, l, self.config.n_groups, d_state)),
-                (0, 1, 3, 2, 4),
-            )
-            V_scaled = jnp.reshape(V_scaled, (b, h // self.ngroups, self.ngroups, l, d))
-            Q = jnp.transpose(
-                jnp.reshape(C, (b, 1, l, self.config.n_groups, d_state)),
-                (0, 1, 3, 2, 4),
-            )
-
-            KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
-            x = jnp.matmul(Q, KV)
-            V_skip = jnp.reshape(
-                V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1)),
-                (b, h // self.config.n_groups, self.config.n_groups, l, d),
-            )
-            x = x + V_skip
-            x = jnp.reshape(jnp.transpose(x, (0, 3, 1, 2, 4)), (b, l, h, d))
-
-        return x
-
     def __call__(self, x: jnp.ndarray):
         """Forward pass of the VMamba2Mixer using non-casual attention duality.
 
@@ -380,7 +327,9 @@ class Mamba2Mixer(nnx.Module):
         x = rearrange(x, "b l (h p) -> b l h p", p=self.config.head_dim)
 
         if self.config.linear_attn_duality:
-            y = self.non_casual_linear_attn(x, dt=dt, A=A, B=B, C=C, D=self.D.value)
+            y = non_casual_linear_attn(
+                x, dt=dt, A=A, B=B, C=C, D=self.D.value, n_groups=self.config.n_groups
+            )
         else:
             # apply ssd function
             # TODO: Bidirectional
@@ -727,6 +676,7 @@ class VMamba2Layer(nnx.Module):
         attn_drop: float = 0.0,
         drop_path: float | list = 0.0,
         init_values: float | None = None,
+        block_type: str = "Mamba2Mixer",
         transformer_attention: Callable = Attention,
         mamba_mixer: Callable = Mamba2Mixer,
         act_layer: Callable = nnx.gelu,
@@ -742,7 +692,7 @@ class VMamba2Layer(nnx.Module):
         self.blocks = [
             VMamba2Block(
                 dim=dim,
-                block_type="Mamba2Mixer",
+                block_type=block_type,
                 num_heads=num_heads,
                 mlp_ratio=mlp_ratio,
                 qkv_bias=qkv_bias,
@@ -753,7 +703,9 @@ class VMamba2Layer(nnx.Module):
                 attn_drop=attn_drop,
                 init_values=init_values,
                 drop_path=(drop_path[i] if isinstance(drop_path, list) else drop_path),
-                attention=mamba_mixer,
+                attention=(
+                    mamba_mixer if "Mamba" in block_type else transformer_attention
+                ),
                 act_layer=act_layer,
                 norm_layer=norm_layer,
                 ffn_layer=ffn_layer,
@@ -766,7 +718,9 @@ class VMamba2Layer(nnx.Module):
             for i in range(depth)
         ]
 
-        self.downsample = downsample(dim=dim) if downsample is not None else None
+        self.downsample = (
+            downsample(dim=dim, rngs=rngs) if downsample is not None else None
+        )
 
     def __call__(self, x: jnp.ndarray):
         for blk in self.blocks:
