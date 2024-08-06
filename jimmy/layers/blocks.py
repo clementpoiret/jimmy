@@ -6,7 +6,7 @@ from einops import rearrange
 from flax import nnx
 from flax.nnx.nnx.module import first_from
 
-from .attention import Attention
+from .attention import Attention, LinearAttention
 from .configs import MambaConfig, TransformerConfig
 from .mlp import Mlp
 
@@ -524,6 +524,151 @@ class VMamba2Block(nnx.Module):
         x1 = self.attn(self.norm1(x1))
 
         x += self.drop_path1(x1)
+
+        x += rearrange(
+            self.cpe2(rearrange(x, "b (h w) c -> b h w c", h=h, w=w)),
+            "b h w c -> b (h w) c",
+        )
+
+        x += self.drop_path2(self.mlp(self.norm2(x)))
+
+        return x
+
+
+# TODO: Abstraction w/ VMamba2Block
+class MllaBlock(nnx.Module):
+
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int = 12,
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = True,
+        ffn_bias: bool = True,
+        proj_drop: float = 0.0,
+        drop_path: float = 0.0,
+        act_layer: Callable = nnx.silu,
+        norm_layer: nnx.Module = nnx.LayerNorm,
+        ffn_layer: nnx.Module = Mlp,
+        rngs: nnx.Rngs = None,
+    ):
+        """Initialize the Block.
+
+        Args:
+            dim (int): Input dimension.
+            block_type (str, optional): Type of block to use. Defaults to "Attention".
+            num_heads (int): Number of attention heads. Defaults to 12.
+            mlp_ratio (float, optional): Ratio of mlp hidden dim to embedding dim. Defaults to 4.
+            qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Defaults to True.
+            qk_norm (bool, optional): If True, normalize the query and key. Defaults to False.
+            ffn_bias (bool, optional): If True, use bias in the feed-forward network. Defaults to True.
+            proj_bias (bool, optional): If True, use bias in projections. Defaults to True.
+            proj_drop (float, optional): Dropout rate of the projection. Defaults to 0.
+            attn_drop (float, optional): Dropout rate of the attention. Defaults to 0.
+            drop_path (float): Stochastic depth rate. Defaults to 0.
+            attention (nnx.Module, optional): Attention module. Defaults to Attention.
+            act_layer (Callable, optional): Activation function. Defaults to nnx.gelu.
+            norm_layer (nnx.Module, optional): Normalization layer. Defaults to nnx.LayerNorm.
+            ffn_layer (nnx.Module, optional): Feed-forward network module. Defaults to Mlp.
+            init_values (Optional[float], optional): Initial value for LayerScale. Defaults to None.
+            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
+        """
+        self.cpe1 = nnx.Conv(
+            in_features=dim,
+            out_features=dim,
+            kernel_size=3,
+            strides=1,
+            padding=1,
+            feature_group_count=dim,
+            use_bias=True,
+            rngs=rngs,
+        )
+        self.norm1 = norm_layer(num_features=dim, rngs=rngs)
+        self.in_proj = nnx.Linear(dim, dim, rngs=rngs)
+        self.act_proj = nnx.Linear(dim, dim, rngs=rngs)
+        self.dwc = nnx.Conv(
+            in_features=dim,
+            out_features=dim,
+            kernel_size=3,
+            strides=1,
+            padding=1,
+            feature_group_count=dim,
+            use_bias=True,
+            rngs=rngs,
+        )
+        self.act = act_layer
+        self.attn = LinearAttention(
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, rngs=rngs
+        )
+        self.out_proj = nnx.Linear(dim, dim, rngs=rngs)
+
+        if isinstance(drop_path, list):
+            if len(drop_path) != 2:
+                raise AssertionError(
+                    f"`drop_path` needs to have 2 elements, got {len(drop_path)}."
+                )
+            dr1, dr2 = drop_path
+            dr1 = float(dr1)
+            dr2 = float(dr2)
+        else:
+            dr1 = dr2 = float(drop_path)
+
+        self.drop_path1 = DropPath(dr1, rngs=rngs) if dr1 > 0.0 else Identity()
+
+        self.cpe2 = nnx.Conv(
+            in_features=dim,
+            out_features=dim,
+            kernel_size=3,
+            strides=1,
+            padding=1,
+            feature_group_count=dim,
+            use_bias=True,
+            rngs=rngs,
+        )
+
+        self.norm2 = norm_layer(num_features=dim, rngs=rngs)
+        self.mlp = ffn_layer(
+            in_features=dim,
+            hidden_features=int(dim * mlp_ratio),
+            act_layer=act_layer,
+            dropout_rate=proj_drop,
+            bias=ffn_bias,
+            rngs=rngs,
+        )
+
+        self.drop_path2 = DropPath(dr2, rngs=rngs) if dr2 > 0.0 else Identity()
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply the block to the input.
+
+        Args:
+            x (jnp.ndarray): Input tensor.
+
+        Returns:
+            jnp.ndarray: Output after applying the block.
+        """
+        _, l, _ = x.shape
+        # Let's assume a squared initial shape
+        h = w = int(l**0.5)
+
+        x1 = x + rearrange(
+            self.cpe1(rearrange(x, "b (h w) c -> b h w c", h=h, w=w)),
+            "b h w c -> b (h w) c",
+        )
+        x1 = self.norm1(x1)
+        act_res = self.act(self.act_proj(x1))
+
+        x1 = self.act(
+            rearrange(
+                self.dwc(rearrange(x, "b (h w) c -> b h w c", h=h, w=w)),
+                "b h w c -> b (h w) c",
+            )
+        )
+
+        x1 = self.attn(x1)
+
+        x1 = self.out_proj(x * act_res)
+        x = x + self.drop_path1(x1)
 
         x += rearrange(
             self.cpe2(rearrange(x, "b (h w) c -> b h w c", h=h, w=w)),

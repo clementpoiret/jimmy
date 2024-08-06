@@ -1,5 +1,5 @@
 from .attention import Attention
-from .blocks import Block, ConvBlock, DropPath, Identity, LayerScale
+from .blocks import Block, ConvBlock, DropPath, Identity, LayerScale, MllaBlock
 from .mamba import (
     Downsample,
     Mamba2VisionMixer,
@@ -7,6 +7,7 @@ from .mamba import (
     MambaVisionMixer,
     VMamba2Layer,
 )
+from .mlla import MllaLayer
 from .mlp import Mlp
 from .patch_embed import (
     ConvPatchEmbed,

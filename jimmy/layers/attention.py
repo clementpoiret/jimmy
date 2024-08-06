@@ -103,6 +103,7 @@ class LinearAttention(nnx.Module):
         rngs: nnx.Rngs = None,
     ):
         self.dim = dim
+        self.num_heads = num_heads
 
         self.qk = nnx.Linear(dim, dim * 2, rngs=rngs)
         self.lepe = nnx.Conv(
@@ -120,7 +121,6 @@ class LinearAttention(nnx.Module):
         h = int(n**0.5)
         w = int(n**0.5)
         num_heads = self.num_heads
-        head_dim = c // num_heads
 
         q, k = rearrange(self.qk(x), "b n (qk h d) -> qk b h n d", qk=2, h=num_heads)
         v = rearrange(x, "b n (h d) -> b h n d", h=num_heads)

@@ -36,9 +36,7 @@ class RoPE(nnx.Module):
         # rotations
         rotations_re = jnp.cos(angles)
         rotations_im = jnp.sin(angles)
-        self.rotations = self.param(
-            "rotations", lambda _: jnp.stack([rotations_re, rotations_im], axis=-1)
-        )
+        self.rotations = nnx.Param(jnp.stack([rotations_re, rotations_im], axis=-1))
 
     def __call__(self, x: jnp.ndarray):
         dtype = x.dtype

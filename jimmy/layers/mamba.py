@@ -659,6 +659,7 @@ class MambaVisionLayer(nnx.Module):
         return x
 
 
+# TODO: Merge with MLLA Layer
 class VMamba2Layer(nnx.Module):
     """A basic MLLA layer for one stage"""
 
