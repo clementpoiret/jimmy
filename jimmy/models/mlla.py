@@ -4,17 +4,13 @@ import jax.numpy as jnp
 from einops import reduce
 from flax import nnx
 
-from jimmy.layers import (
-    ConvStem,
-    MllaLayer,
-    PatchMerging,
-    SimpleConvStem,
-    SimplePatchMerging,
-)
+from jimmy.layers import (ConvStem, MllaLayer, PatchMerging, SimpleConvStem,
+                          SimplePatchMerging)
 
 
 # TODO: Merge with VMamba2
 class Mlla(nnx.Module):
+
     def __init__(
         self,
         patch_size: int = 4,
@@ -38,7 +34,7 @@ class Mlla(nnx.Module):
         rngs: nnx.Rngs = None,
     ):
         num_layers = len(depths)
-        num_features = int(embed_dim * 2 ** (num_layers - 1))
+        num_features = int(embed_dim * 2**(num_layers - 1))
 
         stem = SimpleConvStem if simple_patch_embed else ConvStem
         self.patch_embed = stem(
@@ -62,12 +58,11 @@ class Mlla(nnx.Module):
                 qkv_bias=qkv_bias,
                 ffn_bias=ffn_bias,
                 proj_drop=proj_drop,
-                drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
+                drop_path=dpr[sum(depths[:i]):sum(depths[:i + 1])],
                 norm_layer=norm_layer,
                 downsample=patch_merging_block if i < num_layers - 1 else None,
                 rngs=rngs,
-            )
-            for i in range(num_layers)
+            ) for i in range(num_layers)
         ]
 
         self.norm = norm_layer(num_features, rngs=rngs)

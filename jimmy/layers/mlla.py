@@ -35,18 +35,17 @@ class MllaLayer(nnx.Module):
                 qkv_bias=qkv_bias,
                 ffn_bias=ffn_bias,
                 proj_drop=proj_drop,
-                drop_path=(drop_path[i] if isinstance(drop_path, list) else drop_path),
+                drop_path=(drop_path[i]
+                           if isinstance(drop_path, list) else drop_path),
                 act_layer=act_layer,
                 norm_layer=norm_layer,
                 ffn_layer=ffn_layer,
                 rngs=rngs,
-            )
-            for i in range(depth)
+            ) for i in range(depth)
         ]
 
-        self.downsample = (
-            downsample(dim=dim, rngs=rngs) if downsample is not None else None
-        )
+        self.downsample = (downsample(dim=dim, rngs=rngs)
+                           if downsample is not None else None)
 
     def __call__(self, x: jnp.ndarray):
         for blk in self.blocks:
