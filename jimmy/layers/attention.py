@@ -96,31 +96,27 @@ class LinearAttention(nnx.Module):
 
     def __init__(
         self,
-        dim: int,
-        # input_resolution: tuple,
-        num_heads: int,
-        qkv_bias: bool = True,
-        rngs: nnx.Rngs = None,
+        config: TransformerConfig,
+        *,
+        rngs: nnx.Rngs,
     ):
-        self.dim = dim
-        self.num_heads = num_heads
+        self.config = config
 
-        self.qk = nnx.Linear(dim, dim * 2, rngs=rngs)
+        self.qk = nnx.Linear(config.dim, config.dim * 2, rngs=rngs)
         self.lepe = nnx.Conv(
-            in_features=dim,
-            out_features=dim,
+            in_features=config.dim,
+            out_features=config.dim,
             kernel_size=(3, 3),
             padding=(1, 1),
-            feature_group_count=dim,
+            feature_group_count=config.dim,
             rngs=rngs,
         )
-        # self.rope = RoPE(shape=(input_resolution[0], input_resolution[1], dim))
 
     def __call__(self, x: jnp.ndarray):
         b, n, c = x.shape
         h = int(n**0.5)
         w = int(n**0.5)
-        num_heads = self.num_heads
+        num_heads = self.config.num_heads
 
         q, k = rearrange(self.qk(x), "b n (qk h d) -> qk b h n d", qk=2, h=num_heads)
         v = rearrange(x, "b n (h d) -> b h n d", h=num_heads)
