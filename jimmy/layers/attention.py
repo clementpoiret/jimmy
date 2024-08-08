@@ -2,7 +2,8 @@ import jax.numpy as jnp
 from einops import rearrange, reduce
 from flax import nnx
 
-from .configs import TransformerConfig
+from .configs import AttentionConfig
+from .norm import RMSNormGated
 from .rope import RoPE
 
 
@@ -27,11 +28,20 @@ class Attention(nnx.Module):
 
     def __init__(
         self,
-        config: TransformerConfig,
+        config: AttentionConfig,
         *,
         rngs: nnx.Rngs,
     ):
         self.config = config
+        match config.norm_layer:
+            case "layernorm":
+                norm_layer = nnx.LayerNorm
+            case "rmsnormgated":
+                norm_layer = RMSNormGated
+            case "batchnorm":
+                norm_layer = nnx.BatchNorm
+            case _:
+                raise ValueError(f"Unknown norm `{config.norm_layer}`")
 
         self.qkv = nnx.Linear(
             config.dim, config.dim * 3, use_bias=config.qkv_bias, rngs=rngs
@@ -42,12 +52,8 @@ class Attention(nnx.Module):
         )
         self.proj_drop = nnx.Dropout(config.proj_drop, rngs=rngs)
 
-        self.q_norm = (
-            config.norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
-        )
-        self.k_norm = (
-            config.norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
-        )
+        self.q_norm = norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
+        self.k_norm = norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
 
     def __call__(self, x: jnp.ndarray):
         """
@@ -96,7 +102,7 @@ class LinearAttention(nnx.Module):
 
     def __init__(
         self,
-        config: TransformerConfig,
+        config: AttentionConfig,
         *,
         rngs: nnx.Rngs,
     ):

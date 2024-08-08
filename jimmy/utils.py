@@ -6,6 +6,10 @@ from einops import rearrange
 from jax import dtypes, random
 
 
+def get_defaults(cls) -> dict:
+    return {k: v for k, v in cls.__dict__.items() if "__" not in k}
+
+
 def window_partition(x: jnp.ndarray, window_size: int) -> jnp.ndarray:
     """Partition the input tensor into non-overlapping windows.
 

@@ -1,11 +1,12 @@
 import math
-from typing import Callable, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from jimmy.layers import Attention, Block, Identity, Mlp, PatchEmbed
+from jimmy.layers import Identity, PatchEmbed, ViTBlock
+from jimmy.layers.configs import ViTBlockConfig
 
 # TODO: pos_drop
 # TODO: compare to prepare_tokens_with_masks
@@ -72,10 +73,10 @@ class DinoV2(nnx.Module):
         dynamic_img_size: bool = False,
         dynamic_img_pad: bool = False,
         embed_layer: nnx.Module = PatchEmbed,
-        act_layer: Callable = nnx.gelu,
-        block: nnx.Module = Block,
-        attention: nnx.Module = Attention,
-        ffn_layer: nnx.Module = Mlp,
+        act_layer: str = "gelu",
+        block: nnx.Module = ViTBlock,
+        attention: str = "attention",
+        ffn_layer: str = "mlp",
         init_values: float | None = None,
         interpolate_antialias=False,
         rngs: nnx.Rngs = None,
@@ -91,29 +92,42 @@ class DinoV2(nnx.Module):
         self.num_embedded_prefix_tokens = 0
         self.num_register_tokens = reg_tokens
         self.has_class_token = class_token
-        self.no_embed_class = no_embed_class  # don't embed prefix positions (includes reg)
+        self.no_embed_class = (
+            no_embed_class  # don't embed prefix positions (includes reg)
+        )
         self.interpolate_antialias = interpolate_antialias
         self.dynamic_img_size = dynamic_img_size
         self.pos_embed_reg_tokens = pos_embed_reg_tokens
 
-        self.patch_embed = embed_layer(img_size=img_size,
-                                       patch_size=patch_size,
-                                       in_channels=in_channels,
-                                       embed_dim=embed_dim,
-                                       flatten=not dynamic_img_size,
-                                       dynamic_img_size=dynamic_img_size,
-                                       dynamic_img_pad=dynamic_img_pad,
-                                       rngs=rngs)
-        self.cls_token = nnx.Param(
-            nnx.initializers.zeros(
-                rngs.params(), [1, 1, embed_dim]), ) if class_token else None
-        self.register_tokens = nnx.Param(
-            nnx.initializers.zeros(
-                rngs.params(),
-                [1, reg_tokens, embed_dim],
-            )) if reg_tokens else None
+        self.patch_embed = embed_layer(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_channels=in_channels,
+            embed_dim=embed_dim,
+            flatten=not dynamic_img_size,
+            dynamic_img_size=dynamic_img_size,
+            dynamic_img_pad=dynamic_img_pad,
+            rngs=rngs,
+        )
+        self.cls_token = (
+            nnx.Param(
+                nnx.initializers.zeros(rngs.params(), [1, 1, embed_dim]),
+            )
+            if class_token
+            else None
+        )
+        self.register_tokens = (
+            nnx.Param(
+                nnx.initializers.zeros(
+                    rngs.params(),
+                    [1, reg_tokens, embed_dim],
+                )
+            )
+            if reg_tokens
+            else None
+        )
 
-        self.num_patches = (img_size // patch_size)**2
+        self.num_patches = (img_size // patch_size) ** 2
 
         if no_embed_class:
             self.embed_len = self.num_patches
@@ -128,8 +142,10 @@ class DinoV2(nnx.Module):
             self.pos_embed = None
         else:
             self.pos_embed = nnx.Param(
-                nnx.initializers.normal(.02)(rngs.params(),
-                                             [1, self.embed_len, embed_dim]))
+                nnx.initializers.normal(0.02)(
+                    rngs.params(), [1, self.embed_len, embed_dim]
+                )
+            )
 
         # Stochastic depth decay rule
         if drop_path_uniform:
@@ -141,17 +157,21 @@ class DinoV2(nnx.Module):
         for i in range(depth):
             _block = block(
                 dim=embed_dim,
-                num_heads=num_heads,
-                mlp_ratio=mlp_ratio,
-                qkv_bias=qkv_bias,
-                qk_norm=qk_norm,
-                proj_bias=proj_bias,
-                ffn_bias=ffn_bias,
-                drop_path=dpr[i],
-                attention=attention,
-                act_layer=act_layer,
-                ffn_layer=ffn_layer,
-                init_values=init_values,
+                config=ViTBlockConfig(
+                    mlp_ratio=mlp_ratio,
+                    drop_path=dpr[i],
+                    act_layer=act_layer,
+                    attention=attention,
+                    ffn_layer=ffn_layer,
+                    ffn_bias=ffn_bias,
+                    init_values=init_values,
+                ),
+                attention_kwargs={
+                    "num_heads": num_heads,
+                    "qkv_bias": qkv_bias,
+                    "qk_norm": qk_norm,
+                    "proj_bias": proj_bias,
+                },
                 rngs=rngs,
             )
             setattr(self, f"blocks.{i}", _block)
@@ -188,8 +208,7 @@ class DinoV2(nnx.Module):
         """
         previous_dtype = pos_embed.value.dtype
 
-        num_new_tokens = new_size[0] * new_size[
-            1] + self.num_embedded_prefix_tokens
+        num_new_tokens = new_size[0] * new_size[1] + self.num_embedded_prefix_tokens
 
         if num_new_tokens == self.embed_len and new_size[0] == new_size[1]:
             return pos_embed
@@ -198,13 +217,15 @@ class DinoV2(nnx.Module):
             hw = int(math.sqrt(self.num_patches))
             old_size = hw, hw
 
-        prefix_embed = pos_embed[:, :self.
-                                 num_prefix_tokens] if self.num_prefix_tokens else None
-        pos_embed = pos_embed[:, self.num_prefix_tokens:]
+        prefix_embed = (
+            pos_embed[:, : self.num_prefix_tokens] if self.num_prefix_tokens else None
+        )
+        pos_embed = pos_embed[:, self.num_prefix_tokens :]
 
         pos_embed = pos_embed.astype("float32")
-        pos_embed = jnp.reshape(pos_embed,
-                                (1, old_size[0], old_size[1], self.embed_dim))
+        pos_embed = jnp.reshape(
+            pos_embed, (1, old_size[0], old_size[1], self.embed_dim)
+        )
 
         pos_embed = jax.image.resize(
             pos_embed,
@@ -212,8 +233,7 @@ class DinoV2(nnx.Module):
             method=interpolation,
             antialias=antialias,
         )
-        pos_embed = pos_embed.reshape(1, -1,
-                                      self.embed_dim).astype(previous_dtype)
+        pos_embed = pos_embed.reshape(1, -1, self.embed_dim).astype(previous_dtype)
 
         if prefix_embed is not None:
             pos_embed = jnp.concatenate([prefix_embed, pos_embed], axis=1)
@@ -238,9 +258,8 @@ class DinoV2(nnx.Module):
         if self.dynamic_img_size:
             B, H, W, C = x.shape
             pos_embed = self.resample_pos_embed(
-                self.pos_embed,
-                new_size=(H, W),
-                antialias=self.interpolate_antialias)
+                self.pos_embed, new_size=(H, W), antialias=self.interpolate_antialias
+            )
             x = jnp.reshape(x, (B, -1, C))
         else:
             pos_embed = self.pos_embed
@@ -250,14 +269,16 @@ class DinoV2(nnx.Module):
             # Broadcast cls_token to match batch size
             cls_token_value = self.cls_token.value
             expanded_cls_token = jnp.broadcast_to(
-                cls_token_value, (x.shape[0], 1, cls_token_value.shape[-1]))
+                cls_token_value, (x.shape[0], 1, cls_token_value.shape[-1])
+            )
             to_cat.append(expanded_cls_token)
 
         if self.register_tokens is not None:
             register_tokens_value = self.register_tokens.value
             expanded_register_tokens = jnp.broadcast_to(
-                register_tokens_value, (x.shape[0], self.num_register_tokens,
-                                        register_tokens_value.shape[-1]))
+                register_tokens_value,
+                (x.shape[0], self.num_register_tokens, register_tokens_value.shape[-1]),
+            )
             to_cat.append(expanded_register_tokens)
 
         if self.no_embed_class:
@@ -312,8 +333,8 @@ class DinoV2(nnx.Module):
 
         return {
             "x_norm_clstoken": x_norm[:, 0],
-            "x_norm_regtokens": x_norm[:, 1:self.num_register_tokens + 1],
-            "x_norm_patchtokens": x_norm[:, self.num_register_tokens + 1:],
+            "x_norm_regtokens": x_norm[:, 1 : self.num_register_tokens + 1],
+            "x_norm_patchtokens": x_norm[:, self.num_register_tokens + 1 :],
             "x_prenorm": x,
         }
 

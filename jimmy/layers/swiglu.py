@@ -15,33 +15,32 @@ class SwiGLU(nnx.Module):
         in_features (int): Number of input features.
         hidden_features (int | None, optional): Number of hidden features. If None, set to in_features. Defaults to None.
         out_features (int | None, optional): Number of output features. If None, set to in_features. Defaults to None.
-        act_layer (Callable, optional): Activation function to use. Defaults to nnx.gelu.
-        dropout_rate (float, optional): Dropout rate. Defaults to 0.0.
         bias (bool, optional): Whether to use bias in linear layers. Defaults to True.
         rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
     """
 
+    hidden_features: int | None = None
+    out_features: int | None = None
+    bias: bool = True
+
     def __init__(
         self,
         in_features: int,
-        hidden_features: int | None = None,
-        out_features: int | None = None,
-        act_layer: Callable = nnx.gelu,
-        dropout_rate: float = 0.0,
-        bias: bool = True,
-        rngs: nnx.Rngs = None,
+        *,
+        rngs: nnx.Rngs,
+        **kwargs,
     ):
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
+        self.__dict__.update(**kwargs)
 
-        self.w12 = nnx.Linear(in_features,
-                              hidden_features,
-                              use_bias=bias,
-                              rngs=rngs)
-        self.w3 = nnx.Linear(hidden_features // 2,
-                             out_features,
-                             use_bias=bias,
-                             rngs=rngs)
+        out_features = self.out_features or in_features
+        hidden_features = self.hidden_features or in_features
+
+        self.w12 = nnx.Linear(
+            in_features, hidden_features, use_bias=self.bias, rngs=rngs
+        )
+        self.w3 = nnx.Linear(
+            hidden_features // 2, out_features, use_bias=self.bias, rngs=rngs
+        )
 
     def __call__(self, x: jnp.ndarray):
         """

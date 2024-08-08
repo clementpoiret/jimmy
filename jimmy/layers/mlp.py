@@ -21,30 +21,33 @@ class Mlp(nnx.Module):
         rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
     """
 
+    hidden_features: int | None = None
+    out_features: int | None = None
+    act_layer: Callable = nnx.gelu
+    dropout_rate: float = 0.0
+    bias: bool = True
+
     def __init__(
         self,
         in_features: int,
-        hidden_features: int | None = None,
-        out_features: int | None = None,
-        act_layer: Callable = nnx.gelu,
-        dropout_rate: float = 0.0,
-        bias: bool = True,
-        rngs: nnx.Rngs = None,
+        *,
+        rngs: nnx.Rngs,
+        **kwargs,
     ):
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
+        self.__dict__.update(**kwargs)
 
-        self.fc1 = nnx.Linear(in_features,
-                              hidden_features,
-                              use_bias=bias,
-                              rngs=rngs)
-        self.act = act_layer
-        self.drop1 = nnx.Dropout(dropout_rate, rngs=rngs)
-        self.fc2 = nnx.Linear(hidden_features,
-                              out_features,
-                              use_bias=bias,
-                              rngs=rngs)
-        self.drop2 = nnx.Dropout(dropout_rate, rngs=rngs)
+        out_features = self.out_features or in_features
+        hidden_features = self.hidden_features or in_features
+
+        self.fc1 = nnx.Linear(
+            in_features, hidden_features, use_bias=self.bias, rngs=rngs
+        )
+        self.act = self.act_layer
+        self.drop1 = nnx.Dropout(self.dropout_rate, rngs=rngs)
+        self.fc2 = nnx.Linear(
+            hidden_features, out_features, use_bias=self.bias, rngs=rngs
+        )
+        self.drop2 = nnx.Dropout(self.dropout_rate, rngs=rngs)
 
     def __call__(self, x: jnp.ndarray):
         """

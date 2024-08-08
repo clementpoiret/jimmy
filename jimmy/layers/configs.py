@@ -1,12 +1,62 @@
 import math
 from dataclasses import dataclass
-from typing import Tuple
-
-from flax import nnx
+from typing import Tuple, Optional
 
 
 @dataclass
-class TransformerConfig:
+class ConvBlockConfig:
+    kernel_size = (3, 3)
+    act_layer: str = "gelu"
+    norm_layer: str = "batchnorm"
+    drop_path: float = 0.0
+    init_values: Optional[float] = None
+
+
+@dataclass
+class ViTBlockConfig:
+    mlp_ratio: float = 4.0
+    drop_path: float | list = 0.0
+    act_layer: str = "gelu"
+    norm_layer: str = "layernorm"
+    attention: str = "attention"
+    ffn_layer: str = "mlp"
+    ffn_bias: bool = True
+    proj_drop: float = 0.0
+    init_values: Optional[float] = None
+    msa_window_size: int = -1
+
+    def __post_init__(self):
+        allowed_attentions = [
+            "attention",
+            "linearattention",
+            "mambavisionmixer",
+            "mamba2mixer",
+            "mamba2visionmixer",
+        ]
+        allowed_ffns = ["mlp", "swiglu"]
+        if self.attention not in allowed_attentions:
+            raise ValueError(
+                f"Unsupported attention. Got `{self.attention}`, expected one of {allowed_attentions}."
+            )
+        if self.ffn_layer not in allowed_ffns:
+            raise ValueError(
+                f"Unsupported FFN. Got `{self.ffn_layer}`, expected one of {allowed_ffns}."
+            )
+
+        if isinstance(self.drop_path, list):
+            if len(self.drop_path) != 2:
+                raise AssertionError(
+                    f"`drop_path` needs to have 2 elements, got {len(self.drop_path)}."
+                )
+            dr1, dr2 = self.drop_path
+            self.dr1 = float(dr1)
+            self.dr2 = float(dr2)
+        else:
+            self.dr1 = self.dr2 = float(self.drop_path)
+
+
+@dataclass
+class AttentionConfig:
     dim: int
     num_heads: int = 8
     qkv_bias: bool = True
@@ -14,7 +64,7 @@ class TransformerConfig:
     qk_norm: bool = False
     attn_drop: float = 0.0
     proj_drop: float = 0.0
-    norm_layer: nnx.Module = nnx.LayerNorm
+    norm_layer: str = "layernorm"
 
     def __post_init__(self):
         self.head_dim = self.dim // self.num_heads
@@ -44,7 +94,7 @@ class MambaConfig:
     dt_rank: str = "auto"
     dt_min: float = 0.001
     dt_max: float = 0.1
-    dt_init = "random"
+    dt_init: str = "random"
     dt_scale: float = 1.0
     dt_init_floor: float = 1e-4
     n_groups: int = 1
@@ -55,7 +105,7 @@ class MambaConfig:
     A_init_range: Tuple[int, int] = (1, 16)
     linear_attn_duality: bool = True
     use_fast_path: bool = True
-    layer_idx: int | None = (None,)
+    layer_idx: int | None = None
     bias: bool = False
     conv_bias: bool = True
 

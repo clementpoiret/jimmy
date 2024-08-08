@@ -27,6 +27,7 @@ class PatchEmbed(nnx.Module):
 
     def __init__(
         self,
+        rngs: nnx.Rngs,
         img_size: int | None = None,
         patch_size: Union[List[int], int] = 16,
         in_channels: int = 3,
@@ -36,7 +37,6 @@ class PatchEmbed(nnx.Module):
         dynamic_img_size: bool = False,
         dynamic_img_pad: bool = False,
         use_bias: bool = True,
-        rngs: nnx.Rngs = None,
     ):
         self.patch_size = (
             patch_size if isinstance(patch_size, list) else [patch_size, patch_size]
@@ -213,6 +213,7 @@ class Conv(nnx.Module):
         self,
         in_features: int,
         out_features: int,
+        rngs: nnx.Rngs,
         kernel_size: int = 3,
         stride: int = 1,
         padding: str = "SAME",
@@ -222,7 +223,6 @@ class Conv(nnx.Module):
         dropout: float = 0.0,
         norm: nnx.Module | None = nnx.BatchNorm,
         act: Callable = nnx.relu,
-        rngs: nnx.Rngs = None,
     ):
         self.dropout = nnx.Dropout(dropout, rngs=rngs) if dropout > 0 else None
         self.conv = nnx.Conv(
@@ -257,11 +257,13 @@ class SimpleConvStem(nnx.Module):
 
     def __init__(
         self,
-        patch_size: int = 4,
-        in_features: int = 3,
-        embed_dim=96,
-        rngs: nnx.Rngs = None,
+        patch_size: int,
+        in_features: int,
+        embed_dim: int,
+        flatten: bool,
+        rngs: nnx.Rngs,
     ):
+        self.flatten = flatten
         self.norm = nnx.LayerNorm(embed_dim, rngs=rngs)
         self.conv1 = nnx.Conv(
             in_features=in_features,
@@ -274,8 +276,15 @@ class SimpleConvStem(nnx.Module):
         )
 
     def __call__(self, x: jnp.ndarray):
-        x = rearrange(self.conv1(x), "b h w c -> b (h w) c")
-        return self.norm(x)
+        x = self.conv1(x)
+        _, h, w, _ = x.shape
+
+        x = self.norm(rearrange(x, "b h w c -> b (h w) c"))
+
+        if not self.flatten:
+            return rearrange(x, "b (h w) c -> b h w c", h=h, w=w)
+
+        return x
 
 
 class ConvStem(nnx.Module):
@@ -283,11 +292,13 @@ class ConvStem(nnx.Module):
 
     def __init__(
         self,
-        patch_size: int = 4,
-        in_features: int = 3,
-        embed_dim=96,
-        rngs: nnx.Rngs = None,
+        patch_size: int,
+        in_features: int,
+        embed_dim: int,
+        flatten: bool,
+        rngs: nnx.Rngs,
     ):
+        self.flatten = flatten
         self.conv1 = Conv(
             in_features,
             embed_dim // 2,
@@ -340,7 +351,8 @@ class ConvStem(nnx.Module):
         x += self.conv2(x)
         x = self.conv3(x)
 
-        x = rearrange(x, "b h w c -> b (h w) c")
+        if self.flatten:
+            return rearrange(x, "b h w c -> b (h w) c")
 
         return x
 
@@ -351,51 +363,53 @@ class SimplePatchMerging(nnx.Module):
     def __init__(
         self,
         dim: int,
-        rngs: nnx.Rngs = None,
+        rngs: nnx.Rngs,
     ):
         self.conv = Conv(dim, 2 * dim, kernel_size=3, stride=2, norm=None, rngs=rngs)
         self.norm = nnx.LayerNorm(2 * dim, rngs=rngs)
 
     def __call__(self, x: jnp.ndarray):
-        _, l, _ = x.shape
+        x = self.conv(x)
+        _, h, w, c = x.shape
 
-        h = w = int(l**0.5)
+        x = self.norm(rearrange(x, "b h w c -> b (h w) c"))
 
-        x = rearrange(
-            self.conv(rearrange(x, "b (h w) c -> b h w c", h=h, w=w)),
-            "b h w c -> b (h w) c",
-        )
-        return self.norm(x)
+        return rearrange(x, "b (h w) c -> b h w c", h=h, w=w)
 
 
 class PatchMerging(nnx.Module):
     """Patch merging from Mlla paper"""
 
+    ratio: float = 4.0
+
     def __init__(
         self,
         dim: int,
-        ratio: float = 4.0,
-        rngs: nnx.Rngs = None,
+        *,
+        rngs: nnx.Rngs,
+        **kwargs,
     ):
+        self.__dict__.update(**kwargs)
+
         self.conv = nnx.Sequential(
             Conv(
                 dim,
-                2 * dim * ratio,
+                2 * dim * self.ratio,
                 kernel_size=1,
                 norm=None,
                 rngs=rngs,
             ),
             Conv(
-                2 * dim * ratio,
-                2 * dim * ratio,
+                2 * dim * self.ratio,
+                2 * dim * self.ratio,
                 kernel_size=3,
                 stride=2,
-                groups=int(2 * dim * ratio),
+                groups=int(2 * dim * self.ratio),
                 norm=None,
                 rngs=rngs,
             ),
             Conv(
-                2 * dim * ratio,
+                2 * dim * self.ratio,
                 2 * dim,
                 kernel_size=1,
                 act=None,
@@ -404,12 +418,4 @@ class PatchMerging(nnx.Module):
         )
 
     def __call__(self, x: jnp.ndarray):
-        _, l, _ = x.shape
-
-        h = w = int(l**0.5)
-
-        x = rearrange(
-            self.conv(rearrange(x, "b (h w) c -> b h w c", h=h, w=w)),
-            "b h w c -> b (h w) c",
-        )
-        return x
+        return self.conv(x)

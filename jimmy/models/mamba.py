@@ -1,35 +1,20 @@
-from typing import Callable, List
+from typing import List
 
 import jax.numpy as jnp
 from einops import reduce
 from flax import nnx
 
 from jimmy.layers import (
-    Attention,
+    ConvBlock,
     ConvPatchEmbed,
-    ConvStem,
+    GenericLayer,
     Identity,
-    MambaVisionLayer,
-    MambaVisionMixer,
-    Mlp,
-    PatchMerging,
-    SimpleConvStem,
-    SimplePatchMerging,
-    VMamba2Layer,
+    ViTBlock,
 )
+from jimmy.layers.builders import get_norm
+from jimmy.layers.configs import ConvBlockConfig, ViTBlockConfig
 
-
-def adaptive_avg_pool2d(x: jnp.ndarray):
-    """
-    Perform adaptive average pooling on a 4D input tensor.
-
-    Args:
-        x (jnp.ndarray): Input tensor of shape (batch_size, height, width, channels).
-
-    Returns:
-        jnp.ndarray: Output tensor of shape (batch_size, channels, 1, 1).
-    """
-    return reduce(x, "b h w c -> b c 1 1", "mean")
+from .mlla import Mlla
 
 
 class MambaVision(nnx.Module):
@@ -64,83 +49,108 @@ class MambaVision(nnx.Module):
         num_classes (int, optional): Number of classes for classification. Defaults to 1000.
     """
 
+    msa_blocktype = "attention"
+    mamba_blocktype = "mambavisionmixer"
+
+    block_config = {
+        "mlp_ratio": 4.0,
+        "ffn_layer": "mlp",
+        "ffn_bias": True,
+        "act_layer": "gelu",
+        "init_values": 1e-5,
+    }
+    attention_config = {
+        "qkv_bias": True,
+        "qk_norm": True,
+        "proj_bias": True,
+        "proj_drop": 0.0,
+        "attn_drop": 0.0,
+        "norm_layer": "layernorm",
+    }
+    mamba_config = {
+        "d_state": 8,
+        "d_conv": 3,
+        "expand": 1,
+    }
+
+    norm_layer = "batchnorm"  # check w/ layernorm?
+
+    drop_path_rate: float = 0.2
+    num_classes: int = 1000
+
+    ls_convblock: bool = False
+
     def __init__(
         self,
         in_features: int,
         dim: int,
         in_dim: int,
         depths: List[int],
-        window_size: List[int],
-        mlp_ratio: float,
+        layer_window_sizes: List[int],
+        msa_window_sizes: List[int],
         num_heads: List[int],
-        drop_path_rate: float = 0.2,
-        qkv_bias: bool = True,
-        qk_norm: bool = True,
-        ffn_bias: bool = True,
-        proj_bias: bool = True,
-        proj_drop: float = 0.0,
-        attn_drop: float = 0.0,
-        init_values: float | None = None,
-        init_values_conv: float | None = None,
-        transformer_attention: Callable = Attention,
-        mamba_mixer: Callable = MambaVisionMixer,
-        act_layer: Callable = nnx.gelu,
-        norm_layer: Callable = nnx.LayerNorm,
-        ffn_layer: Callable = Mlp,
-        num_classes: int = 1000,
-        rngs: nnx.Rngs = None,
+        *,
+        rngs: nnx.Rngs,
+        block_kwargs: dict = {},
+        attention_kwargs: dict = {},
+        mamba_kwargs: dict = {},
+        **kwargs,
     ):
-        num_features = int(dim * 2 ** (len(depths) - 1))
-        self.num_classes = num_classes
+        self.__dict__.update(**kwargs)
+        self.attention_config.update(**attention_kwargs)
+        self.mamba_config.update(**mamba_kwargs)
+        self.block_config.update(**block_kwargs)
 
-        self.transformer_block_name = transformer_attention.__name__
-        self.mamba_block_name = mamba_mixer.__name__
+        num_features = int(dim * 2 ** (len(depths) - 1))
+        self.num_classes = self.num_classes
 
         self.patch_embed = ConvPatchEmbed(
             in_features=in_features, hidden_features=in_dim, out_features=dim, rngs=rngs
         )
-        dpr = list(jnp.linspace(0, drop_path_rate, sum(depths)))
+        dpr = list(jnp.linspace(0, self.drop_path_rate, sum(depths)))
 
         self.levels = []
         for i, item in enumerate(depths):
             conv = i > 2
-            level = MambaVisionLayer(
+            _config = {"init_values": None} if not self.ls_convblock and conv else {}
+
+            level = GenericLayer(
                 dim=int(dim * 2**i),
                 depth=item,
-                num_heads=num_heads[i],
-                window_size=window_size[i],
-                conv=conv,
-                downsample=i < 3,
-                mlp_ratio=mlp_ratio,
-                qkv_bias=qkv_bias,
-                qk_norm=qk_norm,
-                ffn_bias=ffn_bias,
-                proj_bias=proj_bias,
-                proj_drop=proj_drop,
-                attn_drop=attn_drop,
+                block=ConvBlock if conv else ViTBlock,
+                block_config=ConvBlockConfig if conv else ViTBlockConfig,
+                layer_window_size=layer_window_sizes[i],
+                msa_window_size=msa_window_sizes[i],
                 drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
-                init_values=init_values,
-                init_values_conv=init_values_conv,
-                transformer_attention=transformer_attention,
-                mamba_mixer=mamba_mixer,
-                act_layer=act_layer,
-                norm_layer=norm_layer,
-                ffn_layer=ffn_layer,
-                block_types=self._get_block_types(item),
+                block_types=[None] if conv else self._get_block_types(item),
+                downsample=i < len(depths) - 1,
+                config_kwargs={
+                    **(self.block_config | _config),
+                },
+                block_kwargs={
+                    "attention_kwargs": {
+                        "num_heads": num_heads[i],
+                        **self.attention_config,
+                    },
+                    "mamba_kwargs": {
+                        **self.mamba_config,
+                    },
+                },
                 rngs=rngs,
             )
             self.levels.append(level)
 
-        self.norm = nnx.BatchNorm(num_features=num_features, rngs=rngs)
+        self.norm = get_norm(self.norm_layer)(num_features=num_features, rngs=rngs)
         self.head = (
-            nnx.Linear(num_features, num_classes, rngs=rngs)
-            if num_classes
+            nnx.Linear(num_features, self.num_classes, rngs=rngs)
+            if self.num_classes
             else Identity()
         )
 
     def _get_block_types(self, l: int):
         """
         Generate a list of block types for a layer.
+        Used to alternate between Multi-Head Self Attention (MSA), and Mamba blocks
 
         Args:
             l (int): Total number of blocks in the layer.
@@ -151,8 +161,8 @@ class MambaVision(nnx.Module):
         """
         first_half_size = (l + 1) // 2
         second_half_size = l // 2
-        return [self.mamba_block_name] * first_half_size + [
-            self.transformer_block_name
+        return [self.mamba_blocktype] * first_half_size + [
+            self.msa_blocktype
         ] * second_half_size
 
     def forward_features(self, x: jnp.ndarray):
@@ -169,7 +179,7 @@ class MambaVision(nnx.Module):
         for level in self.levels:
             x = level(x)
         x = self.norm(x)
-        x = adaptive_avg_pool2d(x)
+        x = reduce(x, "b h w c -> b c", "mean")
         x = jnp.reshape(x, (x.shape[0], -1))
 
         return x
@@ -190,96 +200,18 @@ class MambaVision(nnx.Module):
         return x
 
 
-class VMamba2(nnx.Module):
-    def __init__(
-        self,
-        patch_size: int = 4,
-        in_features: int = 3,
-        num_classes: int = 1000,
-        embed_dim: int = 64,
-        depths: List[int] = [2, 4, 12, 4],
-        num_heads: List[int] = [2, 4, 8, 16],
-        mlp_ratio: float = 4.0,
-        qkv_bias=True,
-        qk_norm: bool = False,
-        ffn_bias: bool = True,
-        proj_bias: bool = True,
-        pos_drop_rate=0.0,
-        attn_drop: float = 0.0,
-        proj_drop: float = 0.0,
-        drop_path_rate: float = 0.2,
-        norm_layer: nnx.Module = nnx.LayerNorm,
-        linear_attn_duality: bool = True,
-        d_state: int = 64,
-        expand: int = 2,
-        chunk_size: int = 256,
-        simple_downsample: bool = False,
-        simple_patch_embed: bool = False,
-        block_types: List[str] = [
-            "Mamba2Mixer",
-            "Mamba2Mixer",
-            "Mamba2Mixer",
-            "Attention",
-        ],
-        rngs: nnx.Rngs = None,
-    ):
-        num_layers = len(depths)
-        num_features = int(embed_dim * 2 ** (num_layers - 1))
-
-        stem = SimpleConvStem if simple_patch_embed else ConvStem
-        self.patch_embed = stem(
-            patch_size=patch_size,
-            in_features=in_features,
-            embed_dim=embed_dim,
-            rngs=rngs,
-        )
-
-        patch_merging_block = SimplePatchMerging if simple_downsample else PatchMerging
-
-        self.pos_drop = nnx.Dropout(pos_drop_rate, rngs=rngs)
-        dpr = list(jnp.linspace(0, drop_path_rate, sum(depths)))
-
-        self.levels = [
-            VMamba2Layer(
-                dim=int(embed_dim * 2**i),
-                depth=depths[i],
-                num_heads=num_heads[i],
-                mlp_ratio=mlp_ratio,
-                qkv_bias=qkv_bias,
-                qk_norm=qk_norm,
-                ffn_bias=ffn_bias,
-                proj_bias=proj_bias,
-                proj_drop=proj_drop,
-                attn_drop=attn_drop,
-                drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
-                block_type=block_types[i],
-                linear_attn_duality=linear_attn_duality,
-                d_state=d_state,
-                expand=expand,
-                chunk_size=chunk_size,
-                norm_layer=norm_layer,
-                downsample=patch_merging_block if i < num_layers - 1 else None,
-                rngs=rngs,
-            )
-            for i in range(num_layers)
-        ]
-
-        self.norm = norm_layer(num_features, rngs=rngs)
-        self.head = nnx.Linear(num_features, num_classes, rngs=rngs)
-
-    def forward_features(self, x: jnp.ndarray):
-        x = self.patch_embed(x)
-        x = self.pos_drop(x)
-
-        for i, level in enumerate(self.levels):
-            x = level(x)
-
-        x = reduce(self.norm(x), "b l c -> b c", "mean")
-
-        return x
-
-    def __call__(self, x: jnp.ndarray):
-        x = self.forward_features(x)
-        x = self.head(x)
-
-        return x
+class VMamba2(Mlla):
+    block_types: list = [
+        "mamba2mixer",
+        "mamba2mixer",
+        "mamba2mixer",
+        "attention",
+    ]
+    block_config = {
+        "mlp_ratio": 4.0,
+        "ffn_layer": "mlp",
+        "ffn_bias": True,
+        "act_layer": "gelu",  # silu in Mlla
+        "init_values": None,
+        "use_dwc": False,  # true in Mlla
+    }
