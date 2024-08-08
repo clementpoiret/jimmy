@@ -75,14 +75,15 @@ class DropPath(nnx.Module):
         rngs = first_from(
             rngs,
             self.rngs,
-            error_msg="""`deterministic` is False, but no `rngs` argument was provided to
+            error_msg=
+            """`deterministic` is False, but no `rngs` argument was provided to
             Dropout as either a __call__ argument or class attribute.""",
         )
         rng = rngs[self.rng_collection]()
 
         keep_prob = 1.0 - self.drop_prob
 
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        shape = (x.shape[0], ) + (1, ) * (x.ndim - 1)
         random_tensor = jax.random.bernoulli(rng, p=keep_prob, shape=shape)
 
         if keep_prob > 0.0 and self.scale_by_keep:

@@ -42,14 +42,16 @@ class Mlp(nnx.Module):
         out_features = self.out_features or in_features
         hidden_features = self.hidden_features or in_features
 
-        self.fc1 = nnx.Linear(
-            in_features, hidden_features, use_bias=self.bias, rngs=rngs
-        )
+        self.fc1 = nnx.Linear(in_features,
+                              hidden_features,
+                              use_bias=self.bias,
+                              rngs=rngs)
         self.act = self.act_layer
         self.drop1 = nnx.Dropout(self.dropout_rate, rngs=rngs)
-        self.fc2 = nnx.Linear(
-            hidden_features, out_features, use_bias=self.bias, rngs=rngs
-        )
+        self.fc2 = nnx.Linear(hidden_features,
+                              out_features,
+                              use_bias=self.bias,
+                              rngs=rngs)
         self.drop2 = nnx.Dropout(self.dropout_rate, rngs=rngs)
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
