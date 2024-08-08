@@ -23,14 +23,14 @@ def window_partition(x: jnp.ndarray, window_size: int) -> jnp.ndarray:
     Note:
         This function assumes that both H and W are divisible by window_size.
     """
-    return rearrange(
-        x, "b (h w1) (w w2) c -> (b h w) (w1 w2) c", w1=window_size, w2=window_size
-    )
+    return rearrange(x,
+                     "b (h w1) (w w2) c -> (b h w) (w1 w2) c",
+                     w1=window_size,
+                     w2=window_size)
 
 
-def window_reverse(
-    windows: jnp.ndarray, window_size: int, H: int, W: int
-) -> jnp.ndarray:
+def window_reverse(windows: jnp.ndarray, window_size: int, H: int,
+                   W: int) -> jnp.ndarray:
     """Reverse the window partitioning process.
 
     Args:
@@ -97,11 +97,11 @@ def custom_uniform(scale, dtype=jnp.float_):
 
 
 def test(
-    jax_fn: Callable,
-    torch_fn: Callable,
-    shape: Tuple[int] = (1, 3, 518, 518),
-    jax_transpose: Tuple[int] = (0, 2, 3, 1),
-    eps: float = 1e-4,
+        jax_fn: Callable,
+        torch_fn: Callable,
+        shape: Tuple[int] = (1, 3, 518, 518),
+        jax_transpose: Tuple[int] = (0, 2, 3, 1),
+        eps: float = 1e-4,
 ) -> bool:
     """
     Simple function to check if two similar implementations have the same output

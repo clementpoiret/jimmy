@@ -4,14 +4,8 @@ import jax.numpy as jnp
 from einops import rearrange, reduce
 from flax import nnx
 
-from jimmy.layers import (
-    ConvStem,
-    GenericLayer,
-    MllaBlock,
-    PatchMerging,
-    SimpleConvStem,
-    SimplePatchMerging,
-)
+from jimmy.layers import (ConvStem, GenericLayer, MllaBlock, PatchMerging,
+                          SimpleConvStem, SimplePatchMerging)
 from jimmy.layers.builders import get_norm
 from jimmy.layers.configs import ViTBlockConfig
 
@@ -77,7 +71,7 @@ class Mlla(nnx.Module):
         assert len(self.block_types) == len(depths)
 
         num_layers = len(depths)
-        num_features = int(embed_dim * 2 ** (num_layers - 1))
+        num_features = int(embed_dim * 2**(num_layers - 1))
 
         stem = SimpleConvStem if self.simple_patch_embed else ConvStem
         self.patch_embed = stem(
@@ -88,9 +82,8 @@ class Mlla(nnx.Module):
             rngs=rngs,
         )
 
-        patch_merging_block = (
-            SimplePatchMerging if self.simple_downsample else PatchMerging
-        )
+        patch_merging_block = (SimplePatchMerging
+                               if self.simple_downsample else PatchMerging)
 
         self.pos_drop = nnx.Dropout(self.pos_drop_rate, rngs=rngs)
         dpr = list(jnp.linspace(0, self.drop_path_rate, sum(depths)))
@@ -102,7 +95,7 @@ class Mlla(nnx.Module):
                 block=MllaBlock,
                 block_config=ViTBlockConfig,
                 layer_window_size=layer_window_sizes[i],
-                drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
+                drop_path=dpr[sum(depths[:i]):sum(depths[:i + 1])],
                 block_types=[self.block_types[i]],
                 downsample=i < num_layers - 1,
                 downsampler=patch_merging_block,
@@ -119,8 +112,7 @@ class Mlla(nnx.Module):
                     },
                 },
                 rngs=rngs,
-            )
-            for i in range(num_layers)
+            ) for i in range(num_layers)
         ]
 
         self.norm = get_norm(self.norm_layer)(num_features, rngs=rngs)

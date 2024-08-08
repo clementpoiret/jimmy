@@ -35,12 +35,14 @@ class SwiGLU(nnx.Module):
         out_features = self.out_features or in_features
         hidden_features = self.hidden_features or in_features
 
-        self.w12 = nnx.Linear(
-            in_features, hidden_features, use_bias=self.bias, rngs=rngs
-        )
-        self.w3 = nnx.Linear(
-            hidden_features // 2, out_features, use_bias=self.bias, rngs=rngs
-        )
+        self.w12 = nnx.Linear(in_features,
+                              hidden_features,
+                              use_bias=self.bias,
+                              rngs=rngs)
+        self.w3 = nnx.Linear(hidden_features // 2,
+                             out_features,
+                             use_bias=self.bias,
+                             rngs=rngs)
 
     def __call__(self, x: jnp.ndarray):
         """

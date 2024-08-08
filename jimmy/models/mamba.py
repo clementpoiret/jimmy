@@ -4,13 +4,8 @@ import jax.numpy as jnp
 from einops import reduce
 from flax import nnx
 
-from jimmy.layers import (
-    ConvBlock,
-    ConvPatchEmbed,
-    GenericLayer,
-    Identity,
-    ViTBlock,
-)
+from jimmy.layers import (ConvBlock, ConvPatchEmbed, GenericLayer, Identity,
+                          ViTBlock)
 from jimmy.layers.builders import get_norm
 from jimmy.layers.configs import ConvBlockConfig, ViTBlockConfig
 
@@ -101,18 +96,21 @@ class MambaVision(nnx.Module):
         self.mamba_config.update(**mamba_kwargs)
         self.block_config.update(**block_kwargs)
 
-        num_features = int(dim * 2 ** (len(depths) - 1))
+        num_features = int(dim * 2**(len(depths) - 1))
         self.num_classes = self.num_classes
 
-        self.patch_embed = ConvPatchEmbed(
-            in_features=in_features, hidden_features=in_dim, out_features=dim, rngs=rngs
-        )
+        self.patch_embed = ConvPatchEmbed(in_features=in_features,
+                                          hidden_features=in_dim,
+                                          out_features=dim,
+                                          rngs=rngs)
         dpr = list(jnp.linspace(0, self.drop_path_rate, sum(depths)))
 
         self.levels = []
         for i, item in enumerate(depths):
             conv = i > 2
-            _config = {"init_values": None} if not self.ls_convblock and conv else {}
+            _config = {
+                "init_values": None
+            } if not self.ls_convblock and conv else {}
 
             level = GenericLayer(
                 dim=int(dim * 2**i),
@@ -121,7 +119,7 @@ class MambaVision(nnx.Module):
                 block_config=ConvBlockConfig if conv else ViTBlockConfig,
                 layer_window_size=layer_window_sizes[i],
                 msa_window_size=msa_window_sizes[i],
-                drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
+                drop_path=dpr[sum(depths[:i]):sum(depths[:i + 1])],
                 block_types=[None] if conv else self._get_block_types(item),
                 downsample=i < len(depths) - 1,
                 config_kwargs={
@@ -140,12 +138,10 @@ class MambaVision(nnx.Module):
             )
             self.levels.append(level)
 
-        self.norm = get_norm(self.norm_layer)(num_features=num_features, rngs=rngs)
-        self.head = (
-            nnx.Linear(num_features, self.num_classes, rngs=rngs)
-            if self.num_classes
-            else Identity()
-        )
+        self.norm = get_norm(self.norm_layer)(num_features=num_features,
+                                              rngs=rngs)
+        self.head = (nnx.Linear(num_features, self.num_classes, rngs=rngs)
+                     if self.num_classes else Identity())
 
     def _get_block_types(self, l: int):
         """
@@ -161,9 +157,8 @@ class MambaVision(nnx.Module):
         """
         first_half_size = (l + 1) // 2
         second_half_size = l // 2
-        return [self.mamba_blocktype] * first_half_size + [
-            self.msa_blocktype
-        ] * second_half_size
+        return [self.mamba_blocktype] * first_half_size + [self.msa_blocktype
+                                                           ] * second_half_size
 
     def forward_features(self, x: jnp.ndarray):
         """

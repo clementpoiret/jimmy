@@ -44,8 +44,7 @@ class LayerScale(nnx.Module):
         self.__dict__.update(**kwargs)
 
         self.gamma = nnx.Param(
-            self.init_values * nnx.initializers.ones(rngs.params(), [dim]),
-        )
+            self.init_values * nnx.initializers.ones(rngs.params(), [dim]), )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply layer scaling to the input.
