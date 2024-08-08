@@ -207,7 +207,6 @@ class ConvBlock(nnx.Module):
         return x
 
 
-# TODO: Silu and LinearAttention to pass from model
 class MllaBlock(nnx.Module):
 
     attention_config = get_defaults(AttentionConfig)
