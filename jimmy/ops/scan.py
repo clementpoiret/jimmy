@@ -157,9 +157,8 @@ def ssd(
     assert x.shape[1] % chunk_size == 0
 
     # Rearrange into chunks
-    x, A, B, C = (
-        rearrange(m, "b (c l) ... -> b c l ...", l=chunk_size) for m in (x, A, B, C)
-    )
+    x, A, B, C = (rearrange(m, "b (c l) ... -> b c l ...", l=chunk_size)
+                  for m in (x, A, B, C))
 
     A = rearrange(A, "b c l h -> b h c l")
     A_cumsum = jnp.cumsum(A, axis=-1)
@@ -180,15 +179,15 @@ def ssd(
 
     states = jnp.concat([initial_states, states], axis=1)
     decay_chunk = jnp.exp(
-        segsum(jnp.pad(A_cumsum[:, :, :, -1], ((0, 0), (0, 0), (1, 0))))
-    )
+        segsum(jnp.pad(A_cumsum[:, :, :, -1], ((0, 0), (0, 0), (1, 0)))))
     new_states = jnp.einsum("bhzc, bchpn -> bzhpn", decay_chunk, states)
     states, final_state = new_states[:, :-1], new_states[:, -1]
 
     # Compute state and output conversion per chunk
     # the left term of low rank factorization of the off diagonal blocks; C terms
     state_decay_out = jnp.exp(A_cumsum)
-    Y_off = jnp.einsum("bclhn, bchpn, bhcl -> bclhp", C, states, state_decay_out)
+    Y_off = jnp.einsum("bclhn, bchpn, bhcl -> bclhp", C, states,
+                       state_decay_out)
 
     # Add the output of intra-chunk and inter-chunk states
     Y = rearrange(Y_diag + Y_off, "b c l h p -> b (c l) h p")
@@ -210,7 +209,8 @@ def non_causal_linear_attn(
     d_state = B.shape[2]
     V = rearrange(x, "b l h d -> b h l d")
     dt = rearrange(dt, "b l h -> b h l")
-    dA = dt[..., None] * jnp.broadcast_to(A[None, :, None, None], (b, A.shape[0], l, 1))
+    dA = dt[..., None] * jnp.broadcast_to(A[None, :, None, None],
+                                          (b, A.shape[0], l, 1))
 
     V_scaled = V * dA
     K = jnp.reshape(B, (b, 1, l, d_state))
@@ -220,7 +220,8 @@ def non_causal_linear_attn(
         KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
         Q = jnp.reshape(C, (b, 1, l, d_state))
         x = jnp.matmul(Q, KV)
-        x = x + V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1))
+        x = x + V * jnp.broadcast_to(D[None, :, None, None],
+                                     (b, D.shape[0], l, 1))
         x = rearrange(x, "b h l d -> b l h d")
     else:
         if h % n_groups != 0:
@@ -239,7 +240,8 @@ def non_causal_linear_attn(
         KV = jnp.matmul(jnp.swapaxes(K, -2, -1), V_scaled)
         x = jnp.matmul(Q, KV)
         V_skip = jnp.reshape(
-            V * jnp.broadcast_to(D[None, :, None, None], (b, D.shape[0], l, 1)),
+            V * jnp.broadcast_to(D[None, :, None, None],
+                                 (b, D.shape[0], l, 1)),
             (b, h // n_groups, n_groups, l, d),
         )
         x = x + V_skip
