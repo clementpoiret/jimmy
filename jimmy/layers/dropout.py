@@ -5,7 +5,22 @@ from flax.nnx.nnx.module import first_from
 
 
 class DropPath(nnx.Module):
-    """Drop paths (Stochastic Depth) per sample."""
+    """
+    Drop paths (Stochastic Depth) per sample.
+
+    This module applies the DropPath regularization technique, which randomly drops
+    entire paths (channels) in residual networks during training.
+
+    Attributes:
+        scale_by_keep (bool): Whether to scale the kept values.
+        deterministic (bool): Whether to use deterministic behavior.
+        rng_collection (str): Name of the RNG collection.
+
+    Args:
+        drop_prob (float): Probability of dropping a path.
+        rngs (nnx.Rngs): Random number generator state.
+        **kwargs: Additional keyword arguments to override default attributes.
+    """
 
     scale_by_keep: bool = True
     deterministic: bool = False
@@ -17,15 +32,6 @@ class DropPath(nnx.Module):
         rngs: nnx.Rngs,
         **kwargs,
     ):
-        """Initialize the DropPath module.
-
-        Args:
-            drop_prob (float, optional): Probability of dropping a path. Defaults to 0.
-            scale_by_keep (bool, optional): Whether to scale the kept values. Defaults to True.
-            deterministic (bool, optional): Whether to use deterministic behavior. Defaults to False.
-            rng_collection (str, optional): Name of the RNG collection. Defaults to "dropout".
-            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
-        """
         self.__dict__.update(**kwargs)
 
         self.drop_prob = drop_prob
@@ -38,15 +44,19 @@ class DropPath(nnx.Module):
         deterministic: bool | None = None,
         rngs: nnx.Rngs | None = None,
     ) -> jnp.ndarray:
-        """Apply DropPath to the input.
+        """
+        Apply DropPath to the input.
 
         Args:
-            x (jnp.ndarray): Input array.
-            deterministic (bool | None, optional): Override for deterministic behavior. Defaults to None.
-            rngs (nnx.Rngs | None, optional): Override for random number generator state. Defaults to None.
+            x (jnp.ndarray): Input array of shape (B, ...).
+            deterministic (bool | None, optional): Override for deterministic behavior.
+            rngs (nnx.Rngs | None, optional): Override for random number generator state.
 
         Returns:
-            jnp.ndarray: Output after applying DropPath.
+            jnp.ndarray: Output after applying DropPath, same shape as input.
+
+        Raises:
+            ValueError: If no deterministic argument or RNG is provided when needed.
         """
         deterministic = first_from(
             deterministic,
@@ -79,4 +89,3 @@ class DropPath(nnx.Module):
             random_tensor /= keep_prob
 
         return x * random_tensor
-        # return jax.lax.select(mask, x / keep_prob, jnp.zeros_like(x))

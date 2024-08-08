@@ -12,17 +12,29 @@ class PatchEmbed(nnx.Module):
 
     This module converts an image into a sequence of embedded patches.
 
+    Attributes:
+        patch_size (List[int]): Size of the patches.
+        img_size (Tuple[int, int] | None): Size of the input image (assumed square).
+        grid_size (Tuple[int, int] | None): Size of the grid after patching.
+        num_patches (int | None): Total number of patches.
+        dynamic_img_size (bool): Whether to allow dynamic image sizes.
+        dynamic_img_pad (bool): Whether to use dynamic padding.
+        flatten (bool): Whether to flatten the output.
+        embed_dim (int): Dimension of the embedded patches.
+        proj (nnx.Conv): Convolutional layer for patch projection.
+        norm (nnx.Module | None): Normalization layer.
+
     Args:
-        img_size (int | None, optional): Size of the input image (assumed square). Defaults to None.
-        patch_size (Union[List[int], int], optional): Size of the patches. Defaults to 16.
-        in_channels (int, optional): Number of input channels. Defaults to 3.
-        embed_dim (int, optional): Dimension of the embedded patches. Defaults to 768.
-        norm_layer (Optional[nnx.Module], optional): Normalization layer. Defaults to None.
-        flatten (bool, optional): Whether to flatten the output. Defaults to True.
-        dynamic_img_size (bool, optional): Whether to allow dynamic image sizes. Defaults to False.
-        dynamic_img_pad (bool, optional): Whether to use dynamic padding. Defaults to False.
-        use_bias (bool, optional): Whether to use bias in the projection. Defaults to True.
-        rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
+        rngs (nnx.Rngs): Random number generators.
+        img_size (int | None, optional): Size of the input image (assumed square).
+        patch_size (Union[List[int], int], optional): Size of the patches.
+        in_channels (int, optional): Number of input channels.
+        embed_dim (int, optional): Dimension of the embedded patches.
+        norm_layer (Optional[nnx.Module], optional): Normalization layer.
+        flatten (bool, optional): Whether to flatten the output.
+        dynamic_img_size (bool, optional): Whether to allow dynamic image sizes.
+        dynamic_img_pad (bool, optional): Whether to use dynamic padding.
+        use_bias (bool, optional): Whether to use bias in the projection.
     """
 
     def __init__(

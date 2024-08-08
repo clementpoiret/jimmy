@@ -17,6 +17,38 @@ from jimmy.layers.configs import ViTBlockConfig
 
 
 class Mlla(nnx.Module):
+    """
+    Mamba-like Linear Attention (MLLA) model.
+
+    This class implements the MLLA architecture, which combines linear attention
+    mechanisms with Mamba-inspired blocks for efficient and effective vision processing.
+
+    Attributes:
+        num_classes (int): Number of output classes for classification.
+        simple_downsample (bool): If True, use simple downsampling instead of patch merging.
+        simple_patch_embed (bool): If True, use simple patch embedding instead of convolutional stem.
+        pos_drop_rate (float): Dropout rate for positional embeddings.
+        drop_path_rate (float): Stochastic depth rate.
+        norm_layer (str): Type of normalization layer to use.
+        block_types (List[str]): Types of blocks to use in each stage.
+        block_config (dict): Configuration for the blocks.
+        attention_config (dict): Configuration for the attention mechanism.
+        mamba_config (dict): Configuration for the Mamba-inspired blocks.
+
+    Args:
+        depths (List[int]): Number of blocks in each stage.
+        patch_size (int): Size of the image patches.
+        in_features (int): Number of input channels.
+        embed_dim (int): Embedding dimension.
+        num_heads (List[int]): Number of attention heads in each stage.
+        layer_window_sizes (List[int]): Window sizes for each layer.
+        rngs (nnx.Rngs): Random number generators.
+        block_kwargs (dict, optional): Additional keyword arguments for blocks.
+        attention_kwargs (dict, optional): Additional keyword arguments for attention.
+        mamba_kwargs (dict, optional): Additional keyword arguments for Mamba blocks.
+        **kwargs: Additional keyword arguments.
+    """
+
     num_classes: int = 1000
     simple_downsample: bool = False
     simple_patch_embed: bool = False
@@ -56,11 +88,11 @@ class Mlla(nnx.Module):
 
     def __init__(
         self,
-        depths: List[int],  # = [2, 4, 12, 4],
-        patch_size: int,  # = 4,
-        in_features: int,  # = 3,
-        embed_dim: int,  # = 64,
-        num_heads: List[int],  # = [2, 4, 8, 16],
+        depths: List[int],
+        patch_size: int,
+        in_features: int,
+        embed_dim: int,
+        num_heads: List[int],
         layer_window_sizes: List[int],
         *,
         rngs: nnx.Rngs,

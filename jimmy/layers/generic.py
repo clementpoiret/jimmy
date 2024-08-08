@@ -11,44 +11,34 @@ from .misc import Downsample
 
 
 class GenericLayer(nnx.Module):
-    """Base layer.
+    """
+    Generic layer for vision models.
 
-    This class implements a layer of the MambaVision architecture, which can be either
-    a convolutional block or a transformer block, optionally followed by a downsampling operation.
-    It supports both traditional transformer attention and Mamba-style mixing mechanisms.
+    This class implements a flexible layer that can be used in various vision model
+    architectures. It supports both convolutional and transformer-style blocks,
+    with optional downsampling.
 
     Attributes:
-        conv (bool): Whether to use convolutional blocks instead of transformer blocks.
-        blocks (list): List of Block or ConvBlock instances.
-        transformer_block (bool): Whether the layer uses transformer blocks.
-        downsample (Downsample | None): Downsampling operation, if applicable.
-        do_gt (bool): Flag for global token usage (currently not implemented).
-        window_size (int): Size of the window for windowed attention in transformer blocks.
+        reshape (bool): Whether to reshape the input for windowed attention.
+        blocks (List[nnx.Module]): List of block modules.
+        downsample (nnx.Module | None): Downsampling module, if applicable.
+        do_gt (bool): Flag for global token usage (not implemented).
+        window_size (int): Size of the window for windowed attention.
 
     Args:
         dim (int): Number of input channels.
         depth (int): Number of blocks in the layer.
-        num_heads (int): Number of attention heads in transformer blocks.
-        window_size (int): Size of the window for windowed attention.
-        conv (bool, optional): Whether to use convolutional blocks. Defaults to False.
-        downsample (bool, optional): Whether to apply downsampling after the blocks. Defaults to True.
-        mlp_ratio (float, optional): Ratio of MLP hidden dim to embedding dim. Defaults to 4.0.
-        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Defaults to True.
-        qk_norm (bool, optional): Whether to apply normalization to query and key. Defaults to False.
-        ffn_bias (bool, optional): If True, use bias in the feed-forward network. Defaults to True.
-        proj_bias (bool, optional): If True, use bias in the projection layers. Defaults to True.
-        proj_drop (float, optional): Dropout rate for projection layers. Defaults to 0.0.
-        attn_drop (float, optional): Dropout rate for attention. Defaults to 0.0.
-        drop_path (float | list, optional): Stochastic depth rate. Defaults to 0.0.
-        init_values (float | None, optional): Initial layer scale value. Defaults to None.
-        init_values_conv (float | None, optional): Initial layer scale value for conv blocks. Defaults to None.
-        transformer_attention (Callable, optional): Attention mechanism to use for transformer blocks. Defaults to Attention.
-        mamba_mixer (Callable, optional): Mamba mixing mechanism to use. Defaults to MambaVisionMixer.
-        act_layer (Callable, optional): Activation function to use. Defaults to nnx.gelu.
-        norm_layer (Callable, optional): Normalization layer to use. Defaults to nnx.LayerNorm.
-        ffn_layer (Callable, optional): Feed-forward network layer to use. Defaults to Mlp.
-        block_types (list, optional): List of block types to use in the layer. Defaults to [].
-        rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
+        rngs (nnx.Rngs): Random number generators.
+        block (nnx.Module): Block module to use (e.g., ViTBlock or ConvBlock).
+        block_config (Callable): Configuration for the block.
+        layer_window_size (int): Size of the layer window for attention.
+        msa_window_size (int): Size of the multi-head self-attention window.
+        drop_path (float | list): Stochastic depth rate.
+        block_types (list): Types of blocks to use in the layer.
+        downsample (bool): Whether to apply downsampling after the blocks.
+        block_kwargs (dict): Additional keyword arguments for blocks.
+        config_kwargs (dict): Additional keyword arguments for block configuration.
+        **kwargs: Additional keyword arguments.
     """
 
     downsampler: nnx.Module = Downsample

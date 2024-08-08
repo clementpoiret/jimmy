@@ -11,14 +11,17 @@ class Mlp(nnx.Module):
     This module implements a two-layer MLP with configurable hidden size,
     activation function, and dropout.
 
+    Attributes:
+        hidden_features (int | None): Number of hidden features. If None, set to in_features.
+        out_features (int | None): Number of output features. If None, set to in_features.
+        act_layer (Callable): Activation function to use.
+        dropout_rate (float): Dropout rate.
+        bias (bool): Whether to use bias in linear layers.
+
     Args:
         in_features (int): Number of input features.
-        hidden_features (int | None, optional): Number of hidden features. If None, set to in_features. Defaults to None.
-        out_features (int | None, optional): Number of output features. If None, set to in_features. Defaults to None.
-        act_layer (Callable, optional): Activation function to use. Defaults to nnx.gelu.
-        dropout_rate (float, optional): Dropout rate. Defaults to 0.0.
-        bias (bool, optional): Whether to use bias in linear layers. Defaults to True.
-        rngs (nnx.Rngs, optional): Random number generators. Defaults to None.
+        rngs (nnx.Rngs): Random number generators.
+        **kwargs: Additional keyword arguments to override default attributes.
     """
 
     hidden_features: int | None = None
@@ -49,15 +52,15 @@ class Mlp(nnx.Module):
         )
         self.drop2 = nnx.Dropout(self.dropout_rate, rngs=rngs)
 
-    def __call__(self, x: jnp.ndarray):
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """
         Forward pass of the MLP.
 
         Args:
-            x (jnp.ndarray): Input tensor.
+            x (jnp.ndarray): Input tensor of shape (B, ..., in_features).
 
         Returns:
-            jnp.ndarray: Output tensor after passing through the MLP.
+            jnp.ndarray: Output tensor of shape (B, ..., out_features).
         """
         x = self.fc1(x)
         x = self.act(x)

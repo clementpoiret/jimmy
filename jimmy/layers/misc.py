@@ -27,9 +27,12 @@ class Downsample(nnx.Module):
 
         Args:
             dim (int): Number of input channels.
+            rngs (nnx.Rngs): Random number generator state.
+            **kwargs: Additional keyword arguments.
+
+        Attributes:
             keep_dim (bool): If True, maintain the number of channels in the output.
                              If False, double the number of channels.
-            rngs (nnx.Rngs, optional): Random number generator state. Defaults to None.
         """
         self.__dict__.update(**kwargs)
 
@@ -44,5 +47,13 @@ class Downsample(nnx.Module):
             rngs=rngs,
         )
 
-    def __call__(self, x: jnp.ndarray):
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply downsampling to the input.
+
+        Args:
+            x (jnp.ndarray): Input tensor of shape (B, H, W, C).
+
+        Returns:
+            jnp.ndarray: Downsampled tensor of shape (B, H/2, W/2, C) or (B, H/2, W/2, 2C).
+        """
         return self.reduction(x)
