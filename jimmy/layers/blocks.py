@@ -5,7 +5,8 @@ from flax import nnx
 from jimmy.utils import get_defaults, window_partition, window_reverse
 
 from .builders import get_act, get_module, get_norm
-from .configs import AttentionConfig, ConvBlockConfig, MambaConfig, ViTBlockConfig
+from .configs import (AttentionConfig, ConvBlockConfig, MambaConfig,
+                      ViTBlockConfig)
 from .dropout import DropPath
 from .misc import Identity
 from .norm import LayerScale
@@ -61,21 +62,14 @@ class ViTBlock(nnx.Module):
         self.use_windowed_attention = not is_mamba and config.msa_window_size != -1
 
         attention = get_module(config.attention)
-        attn_cfg = (
-            MambaConfig(d_model=dim, **self.mamba_config)
-            if is_mamba
-            else AttentionConfig(dim, **self.attention_config)
-        )
+        attn_cfg = (MambaConfig(d_model=dim, **self.mamba_config) if is_mamba
+                    else AttentionConfig(dim, **self.attention_config))
         self.attn = attention(config=attn_cfg, rngs=rngs)
 
-        self.ls1 = (
-            LayerScale(dim, init_values=config.init_values, rngs=rngs)
-            if config.init_values
-            else Identity()
-        )
-        self.drop_path1 = (
-            DropPath(config.dr1, rngs=rngs) if config.dr1 > 0.0 else Identity()
-        )
+        self.ls1 = (LayerScale(dim, init_values=config.init_values, rngs=rngs)
+                    if config.init_values else Identity())
+        self.drop_path1 = (DropPath(config.dr1, rngs=rngs)
+                           if config.dr1 > 0.0 else Identity())
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
         self.mlp = get_module(config.ffn_layer)(
@@ -86,14 +80,10 @@ class ViTBlock(nnx.Module):
             bias=config.ffn_bias,
             rngs=rngs,
         )
-        self.ls2 = (
-            LayerScale(dim, init_values=config.init_values, rngs=rngs)
-            if config.init_values
-            else Identity()
-        )
-        self.drop_path2 = (
-            DropPath(config.dr2, rngs=rngs) if config.dr2 > 0.0 else Identity()
-        )
+        self.ls2 = (LayerScale(dim, init_values=config.init_values, rngs=rngs)
+                    if config.init_values else Identity())
+        self.drop_path2 = (DropPath(config.dr2, rngs=rngs)
+                           if config.dr2 > 0.0 else Identity())
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
@@ -180,16 +170,10 @@ class ConvBlock(nnx.Module):
             rngs=rngs,
         )
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
-        self.ls1 = (
-            LayerScale(dim, init_values=config.init_values, rngs=rngs)
-            if config.init_values
-            else Identity()
-        )
-        self.drop_path1 = (
-            DropPath(float(config.drop_path), rngs=rngs)
-            if config.drop_path > 0.0
-            else Identity()
-        )
+        self.ls1 = (LayerScale(dim, init_values=config.init_values, rngs=rngs)
+                    if config.init_values else Identity())
+        self.drop_path1 = (DropPath(float(config.drop_path), rngs=rngs)
+                           if config.drop_path > 0.0 else Identity())
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the ConvBlock to the input.
@@ -284,16 +268,12 @@ class MllaBlock(nnx.Module):
         is_mamba = "mamba" in config.attention
 
         attention = get_module(config.attention)
-        attn_cfg = (
-            MambaConfig(d_model=dim, **self.mamba_config)
-            if is_mamba
-            else AttentionConfig(dim, **self.attention_config)
-        )
+        attn_cfg = (MambaConfig(d_model=dim, **self.mamba_config) if is_mamba
+                    else AttentionConfig(dim, **self.attention_config))
         self.attn = attention(config=attn_cfg, rngs=rngs)
 
-        self.drop_path1 = (
-            DropPath(config.dr1, rngs=rngs) if config.dr1 > 0.0 else Identity()
-        )
+        self.drop_path1 = (DropPath(config.dr1, rngs=rngs)
+                           if config.dr1 > 0.0 else Identity())
 
         self.cpe2 = nnx.Conv(
             in_features=dim,
@@ -316,9 +296,8 @@ class MllaBlock(nnx.Module):
             rngs=rngs,
         )
 
-        self.drop_path2 = (
-            DropPath(config.dr2, rngs=rngs) if config.dr2 > 0.0 else Identity()
-        )
+        self.drop_path2 = (DropPath(config.dr2, rngs=rngs)
+                           if config.dr2 > 0.0 else Identity())
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
