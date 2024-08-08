@@ -196,7 +196,7 @@ def ssd(
     return Y, final_state
 
 
-def non_casual_linear_attn(
+def non_causal_linear_attn(
     x: jnp.ndarray,
     dt: jnp.ndarray,
     A: jnp.ndarray,
@@ -205,7 +205,7 @@ def non_casual_linear_attn(
     D: jnp.ndarray,
     n_groups: int = 1,
 ):
-    """Non-casual attention duality from the VSSD paper."""
+    """Non-causal attention duality from the VSSD paper."""
     b, l, h, d = x.shape
     d_state = B.shape[2]
     V = rearrange(x, "b l h d -> b h l d")

@@ -6,7 +6,7 @@ from einops import rearrange, repeat
 from flax import nnx
 from jax import random
 
-from jimmy.ops.scan import non_casual_linear_attn, selective_scan, ssd
+from jimmy.ops.scan import non_causal_linear_attn, selective_scan, ssd
 from jimmy.utils import custom_uniform
 
 from .configs import MambaConfig
@@ -204,7 +204,7 @@ class Mamba2Mixer(nnx.Module):
     References:
         [1] Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality
             (https://arxiv.org/abs/2401.04054)
-        [2] VSSD: Vision Mamba with Non-Casual State Space Duality
+        [2] VSSD: Vision Mamba with Non-Causal State Space Duality
             (https://arxiv.org/abs/2407.18559)
     """
 
@@ -261,7 +261,7 @@ class Mamba2Mixer(nnx.Module):
         )
 
     def __call__(self, x: jnp.ndarray):
-        """Forward pass of the VMamba2Mixer using non-casual attention duality.
+        """Forward pass of the VMamba2Mixer using non-causal attention duality.
 
         Args:
             x (jnp.ndarray): Input tensor of shape (batch_size, sequence_length, d_model).
@@ -296,7 +296,7 @@ class Mamba2Mixer(nnx.Module):
         x = rearrange(x, "b l (h p) -> b l h p", p=self.config.head_dim)
 
         if self.config.linear_attn_duality:
-            y = non_casual_linear_attn(
+            y = non_causal_linear_attn(
                 x, dt=dt, A=A, B=B, C=C, D=self.D.value, n_groups=self.config.n_groups
             )
         else:
