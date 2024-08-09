@@ -139,7 +139,7 @@ model.train()
 
 # Defines the wrapper tracking the EMA of the weights
 ema_model = EmaModel(model)
-ema_model.eval()  # To disable dropouts
+ema_model.model.eval()  # To disable dropouts
 
 optimizer = nnx.Optimizer(model, adam(1e-3))
 
