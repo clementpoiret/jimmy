@@ -108,6 +108,67 @@ custom_config = {
 custom_model = load_model(custom_config, rngs=rngs)
 ```
 
+## Advanced Training Example
+
+Here is a toy example to train [Mlla](https://arxiv.org/abs/2405.16605)
+using a [MESA](https://arxiv.org/abs/2205.14083) loss term based on an Exponential
+Moving Average of the weights.
+
+```python
+from flax import nnx
+from jimmy.models.mlla import Mlla
+from jimmy.models.emamodel import EmaModel
+from optax import adam
+from optax.losses import softmax_cross_entropy
+
+x, y = ...
+criterion = softmax_cross_entropy
+
+# Defines the model
+model = Mlla(
+    num_classes=1000,
+    depths=[2, 4, 12, 4],
+    patch_size=4,
+    in_features=3,
+    embed_dim=96,
+    num_heads=[2, 4, 8, 16],
+    layer_window_sizes=[-1, -1, -1, -1],
+    rngs=rngs,
+)
+model.train()
+
+# Defines the wrapper tracking the EMA of the weights
+ema_model = EmaModel(model)
+ema_model.eval()  # To disable dropouts
+
+optimizer = nnx.Optimizer(model, adam(1e-3))
+
+
+# Core training fn
+@nnx.jit
+def train(model, ema_model, optimizer, x, y)
+    def loss_fn(model, ema_model):
+        y_pred = model(x)
+        ema_outputs = ema_model(x)
+
+        # Actually you may want to setup a warmup phase, or start MESA after X epochs
+        loss = criterion(y_pred, y) + 0.3 * criterion(y_pred, ema_outputs)
+
+    loss, grads = nnx.value_and_grad(loss_fn)(model, ema_model)
+
+    optimizer.update(grads)
+    params = nnx.state(model, nnx.Param)
+
+    # Updates the moving average
+    ema_model.update(params)
+
+    return loss
+
+for i in range(8):
+    loss = train(model, ema_model, optimizer, x, y)
+    print(i, loss)
+```
+
 ## Contributing
 
 Contributions to Jimmy are welcome! Please feel free to submit a Pull Request.
