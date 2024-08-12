@@ -65,7 +65,8 @@ class PosEmbMLPSwinv1D(nnx.Module):
                 relative_coords_h = jnp.arange(0, seq_len, dtype=x.dtype)
                 relative_coords_h -= seq_len // 2
                 relative_coords_h /= seq_len // 2
-                relative_coords_table = relative_coords_h[jnp.newaxis, :, jnp.newaxis]
+                relative_coords_table = relative_coords_h[jnp.newaxis, :,
+                                                          jnp.newaxis]
 
                 self.pos_emb = self.cpb_mlp(relative_coords_table)
                 self.relative_bias = self.pos_emb
@@ -74,12 +75,12 @@ class PosEmbMLPSwinv1D(nnx.Module):
                 relative_coords_h = jnp.arange(0, seq_len, dtype=x.dtype)
                 relative_coords_w = jnp.arange(0, seq_len, dtype=x.dtype)
                 relative_coords_table = jnp.stack(
-                    jnp.meshgrid(relative_coords_h, relative_coords_w)
-                )
+                    jnp.meshgrid(relative_coords_h, relative_coords_w))
                 relative_coords_table -= seq_len // 2
                 relative_coords_table /= seq_len // 2
 
-                flattened_table = rearrange(relative_coords_table, "c h w -> 1 (h w) c")
+                flattened_table = rearrange(relative_coords_table,
+                                            "c h w -> 1 (h w) c")
 
                 self.pos_emb = self.cpb_mlp(flattened_table)
 
@@ -117,15 +118,14 @@ class PosEmbMLPSwinv2D(nnx.Module):
         self.num_heads = num_heads
         self.seq_len = seq_len
 
-        relative_coords_h = jnp.arange(
-            -(self.window_size[0] - 1), self.window_size[0], dtype=jnp.float32
-        )
-        relative_coords_w = jnp.arange(
-            -(self.window_size[1] - 1), self.window_size[1], dtype=jnp.float32
-        )
+        relative_coords_h = jnp.arange(-(self.window_size[0] - 1),
+                                       self.window_size[0],
+                                       dtype=jnp.float32)
+        relative_coords_w = jnp.arange(-(self.window_size[1] - 1),
+                                       self.window_size[1],
+                                       dtype=jnp.float32)
         relative_coords_table = jnp.stack(
-            jnp.meshgrid(relative_coords_h, relative_coords_w)
-        )
+            jnp.meshgrid(relative_coords_h, relative_coords_w))
         relative_coords_table = rearrange(
             relative_coords_table,
             "c h w -> 1 h w c",
@@ -133,26 +133,22 @@ class PosEmbMLPSwinv2D(nnx.Module):
 
         if self.pretrained_window_size[0] > 0:
             relative_coords_table = relative_coords_table.at[:, :, :, 0].set(
-                relative_coords_table[:, :, :, 0] / pretrained_window_size[0] - 1
-            )
+                relative_coords_table[:, :, :, 0] / pretrained_window_size[0] -
+                1)
             relative_coords_table = relative_coords_table.at[:, :, :, 1].set(
-                relative_coords_table[:, :, :, 1] / pretrained_window_size[1] - 1
-            )
+                relative_coords_table[:, :, :, 1] / pretrained_window_size[1] -
+                1)
         else:
             relative_coords_table = relative_coords_table.at[:, :, :, 0].set(
-                relative_coords_table[:, :, :, 0] / window_size[0] - 1
-            )
+                relative_coords_table[:, :, :, 0] / window_size[0] - 1)
             relative_coords_table = relative_coords_table.at[:, :, :, 1].set(
-                relative_coords_table[:, :, :, 1] / window_size[1] - 1
-            )
+                relative_coords_table[:, :, :, 1] / window_size[1] - 1)
 
         if not self.no_log:
             relative_coords_table = relative_coords_table * 8
             relative_coords_table = (
-                jnp.sign(relative_coords_table)
-                * jnp.log2(jnp.abs(relative_coords_table) + 1.0)
-                / jnp.log2(8)
-            )
+                jnp.sign(relative_coords_table) *
+                jnp.log2(jnp.abs(relative_coords_table) + 1.0) / jnp.log2(8))
 
         self.relative_coords_table = nnx.Variable(relative_coords_table)
 
@@ -160,14 +156,13 @@ class PosEmbMLPSwinv2D(nnx.Module):
         coords_w = jnp.arange(self.window_size[1])
         coords = jnp.stack(jnp.meshgrid(coords_h, coords_w))
         coords_flatten = coords.reshape(2, -1)
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:,
+                                                                      None, :]
         relative_coords = relative_coords.transpose(1, 2, 0)
         relative_coords = relative_coords + jnp.array(
-            [self.window_size[0] - 1, self.window_size[1] - 1]
-        )
+            [self.window_size[0] - 1, self.window_size[1] - 1])
         relative_coords = relative_coords.at[:, :, 0].set(
-            relative_coords[:, :, 0] * (2 * self.window_size[1] - 1)
-        )
+            relative_coords[:, :, 0] * (2 * self.window_size[1] - 1))
         relative_position_index = jnp.sum(relative_coords, axis=-1)
 
         self.relative_position_index = nnx.Variable(relative_position_index)
@@ -175,7 +170,8 @@ class PosEmbMLPSwinv2D(nnx.Module):
         self.grid_exists = False
         self.pos_emb = None
         self.deployed = False
-        relative_bias = jnp.zeros((1, self.num_heads, self.seq_len, self.seq_len))
+        relative_bias = jnp.zeros(
+            (1, self.num_heads, self.seq_len, self.seq_len))
 
         self.relative_bias = nnx.Variable(relative_bias)
 
@@ -192,16 +188,15 @@ class PosEmbMLPSwinv2D(nnx.Module):
             self.grid_exists = True
 
             relative_position_bias_table = self.cpb_mlp(
-                self.relative_coords_table
-            ).reshape(-1, self.num_heads)
+                self.relative_coords_table).reshape(-1, self.num_heads)
             relative_position_bias = relative_position_bias_table[
-                self.relative_position_index.value.reshape(-1)
-            ].reshape(
-                self.window_size[0] * self.window_size[1],
-                self.window_size[0] * self.window_size[1],
-                -1,
-            )
-            relative_position_bias = jnp.transpose(relative_position_bias, (2, 0, 1))
+                self.relative_position_index.value.reshape(-1)].reshape(
+                    self.window_size[0] * self.window_size[1],
+                    self.window_size[0] * self.window_size[1],
+                    -1,
+                )
+            relative_position_bias = jnp.transpose(relative_position_bias,
+                                                   (2, 0, 1))
             relative_position_bias = 16 * nnx.sigmoid(relative_position_bias)
 
             n_global_feature = x.shape[2] - local_window_size
@@ -214,12 +209,12 @@ class PosEmbMLPSwinv2D(nnx.Module):
                 for i in range(seq_len):
                     for j in range(seq_len):
                         ind = (i + 1) * step_for_ct * self.window_size[0] + (
-                            j + 1
-                        ) * step_for_ct
+                            j + 1) * step_for_ct
                         indices.append(int(ind))
 
                 top_part = relative_position_bias[:, indices, :]
-                lefttop_part = relative_position_bias[:, indices, :][:, :, indices]
+                lefttop_part = relative_position_bias[:, indices, :][:, :,
+                                                                     indices]
                 left_part = relative_position_bias[:, :, indices]
 
             relative_position_bias = jnp.pad(
@@ -229,15 +224,21 @@ class PosEmbMLPSwinv2D(nnx.Module):
 
             if n_global_feature > 0 and self.ct_correct:
                 relative_position_bias = relative_position_bias * 0.0
-                relative_position_bias = relative_position_bias.at[
-                    :, :n_global_feature, :n_global_feature
-                ].set(lefttop_part)
-                relative_position_bias = relative_position_bias.at[
-                    :, :n_global_feature, n_global_feature:
-                ].set(top_part)
-                relative_position_bias = relative_position_bias.at[
-                    :, n_global_feature:, :n_global_feature
-                ].set(left_part)
+                relative_position_bias = relative_position_bias.at[:, :
+                                                                   n_global_feature, :
+                                                                   n_global_feature].set(
+                                                                       lefttop_part
+                                                                   )
+                relative_position_bias = relative_position_bias.at[:, :
+                                                                   n_global_feature,
+                                                                   n_global_feature:].set(
+                                                                       top_part
+                                                                   )
+                relative_position_bias = relative_position_bias.at[:,
+                                                                   n_global_feature:, :
+                                                                   n_global_feature].set(
+                                                                       left_part
+                                                                   )
 
             self.pos_emb = relative_position_bias[jnp.newaxis, ...]
             self.relative_bias = self.pos_emb
@@ -268,9 +269,8 @@ class RoPE(nnx.Module):
         angles = jnp.concatenate(
             [
                 t[..., None] * theta_ks
-                for t in jnp.meshgrid(
-                    *[jnp.arange(d) for d in channel_dims], indexing="ij"
-                )
+                for t in jnp.meshgrid(*[jnp.arange(d) for d in channel_dims],
+                                      indexing="ij")
             ],
             axis=-1,
         )
@@ -278,7 +278,8 @@ class RoPE(nnx.Module):
         # rotations
         rotations_re = jnp.cos(angles)
         rotations_im = jnp.sin(angles)
-        self.rotations = nnx.Variable(jnp.stack([rotations_re, rotations_im], axis=-1))
+        self.rotations = nnx.Variable(
+            jnp.stack([rotations_re, rotations_im], axis=-1))
 
     def __call__(self, x: jnp.ndarray):
         dtype = x.dtype
@@ -289,7 +290,8 @@ class RoPE(nnx.Module):
         x_complex = x_reshaped[..., 0] + 1j * x_reshaped[..., 1]
 
         # Apply rotation
-        rotations_complex = self.rotations[..., 0] + 1j * self.rotations[..., 1]
+        rotations_complex = self.rotations[...,
+                                           0] + 1j * self.rotations[..., 1]
         pe_x = rotations_complex * x_complex
 
         # Convert back to real representation

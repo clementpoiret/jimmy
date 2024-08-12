@@ -87,12 +87,13 @@ class FasterViT(nnx.Module):
         self.attention_config.update(**attention_kwargs)
         self.block_config.update(**block_kwargs)
 
-        num_features = int(dim * 2 ** (len(depths) - 1))
+        num_features = int(dim * 2**(len(depths) - 1))
         self.num_classes = self.num_classes
 
-        self.patch_embed = ConvPatchEmbed(
-            in_features=in_features, hidden_features=in_dim, out_features=dim, rngs=rngs
-        )
+        self.patch_embed = ConvPatchEmbed(in_features=in_features,
+                                          hidden_features=in_dim,
+                                          out_features=dim,
+                                          rngs=rngs)
         dpr = list(jnp.linspace(0, self.drop_path_rate, sum(depths)))
 
         if self.hat is None:
@@ -103,17 +104,19 @@ class FasterViT(nnx.Module):
         self.levels = []
         for i, item in enumerate(depths):
             conv = i < 2
-            _config = {"init_values": None} if not self.ls_convblock and conv else {}
+            _config = {
+                "init_values": None
+            } if not self.ls_convblock and conv else {}
 
             level = FasterViTLayer(
                 dim=int(dim * 2**i),
                 depth=item,
-                input_resolution=int(2 ** (-2 - i) * resolution),
+                input_resolution=int(2**(-2 - i) * resolution),
                 window_size=window_sizes[i],
                 ct_size=ct_size,
                 block=ConvBlock if conv else HATBlock,
                 block_config=ConvBlockConfig if conv else ViTBlockConfig,
-                drop_path=dpr[sum(depths[:i]) : sum(depths[: i + 1])],
+                drop_path=dpr[sum(depths[:i]):sum(depths[:i + 1])],
                 block_types=[None],
                 downsample=i < len(depths) - 1,
                 config_kwargs={
@@ -130,12 +133,10 @@ class FasterViT(nnx.Module):
             )
             self.levels.append(level)
 
-        self.norm = get_norm(self.norm_layer)(num_features=num_features, rngs=rngs)
-        self.head = (
-            nnx.Linear(num_features, self.num_classes, rngs=rngs)
-            if self.num_classes
-            else Identity()
-        )
+        self.norm = get_norm(self.norm_layer)(num_features=num_features,
+                                              rngs=rngs)
+        self.head = (nnx.Linear(num_features, self.num_classes, rngs=rngs)
+                     if self.num_classes else Identity())
 
     def forward_features(self, x: jnp.ndarray):
         """

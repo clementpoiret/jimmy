@@ -69,18 +69,21 @@ class GenericLayer(nnx.Module):
             if len(block_types) != depth:
                 if len(block_types) != 1:
                     raise ValueError(
-                        "Length mismatch between `block_types` and `depth`."
-                    )
+                        "Length mismatch between `block_types` and `depth`.")
                 block_type = block_types[0]
             else:
                 block_type = block_types[i]
 
             cfg = config_kwargs | {
-                "drop_path": drop_path[i] if isinstance(drop_path, list) else drop_path,
+                "drop_path":
+                drop_path[i] if isinstance(drop_path, list) else drop_path,
                 "attention": block_type,
                 "msa_window_size": msa_window_size,
             }
-            cfg = {k: v for k, v in cfg.items() if k in block_config.__dict__.keys()}
+            cfg = {
+                k: v
+                for k, v in cfg.items() if k in block_config.__dict__.keys()
+            }
 
             self.blocks.append(
                 block(
@@ -88,12 +91,10 @@ class GenericLayer(nnx.Module):
                     config=block_config(**cfg),
                     rngs=rngs,
                     **block_kwargs,
-                )
-            )
+                ))
 
-        self.downsample = (
-            None if not downsample else self.downsampler(dim=dim, rngs=rngs)
-        )
+        self.downsample = (None if not downsample else self.downsampler(
+            dim=dim, rngs=rngs))
         self.do_gt = False
         self.window_size = layer_window_size
 

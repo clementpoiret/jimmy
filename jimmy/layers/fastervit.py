@@ -5,7 +5,6 @@ from einops import rearrange
 from flax import nnx
 from flax.linen import avg_pool
 
-
 from .blocks import HATBlock
 from .configs import ViTBlockConfig
 from .misc import Downsample
@@ -126,18 +125,24 @@ class FasterViTLayer(nnx.Module):
         self.blocks = []
         for i in range(depth):
             cfg = config_kwargs | {
-                "drop_path": drop_path[i] if isinstance(drop_path, list) else drop_path,
+                "drop_path":
+                drop_path[i] if isinstance(drop_path, list) else drop_path,
             }
-            cfg = {k: v for k, v in cfg.items() if k in block_config.__dict__.keys()}
+            cfg = {
+                k: v
+                for k, v in cfg.items() if k in block_config.__dict__.keys()
+            }
 
             if self.is_hat:
                 block_kwargs = block_kwargs | {
-                    "sr_ratio": (
-                        input_resolution // window_size if not self.only_local else 1
-                    ),
-                    "window_size": window_size,
-                    "last": i == depth - 1,
-                    "ct_size": self.ct_size,
+                    "sr_ratio": (input_resolution //
+                                 window_size if not self.only_local else 1),
+                    "window_size":
+                    window_size,
+                    "last":
+                    i == depth - 1,
+                    "ct_size":
+                    self.ct_size,
                 }
 
             self.blocks.append(
@@ -146,20 +151,14 @@ class FasterViTLayer(nnx.Module):
                     config=block_config(**cfg),
                     rngs=rngs,
                     **block_kwargs,
-                )
-            )
+                ))
 
-        self.downsample = (
-            None if not downsample else self.downsampler(dim=dim, rngs=rngs)
-        )
+        self.downsample = (None if not downsample else self.downsampler(
+            dim=dim, rngs=rngs))
 
-        if (
-            len(self.blocks)
-            and not self.only_local
-            and input_resolution // window_size > 1
-            and self.hierarchy
-            and self.is_hat
-        ):
+        if (len(self.blocks) and not self.only_local
+                and input_resolution // window_size > 1 and self.hierarchy
+                and self.is_hat):
             self.global_tokenizer = TokenInitializer(
                 dim,
                 input_resolution,
@@ -174,9 +173,10 @@ class FasterViTLayer(nnx.Module):
         self.window_size = window_size
 
     def window_partition(self, x: jnp.ndarray, window_size: int):
-        return rearrange(
-            x, "b (h h1) (w w1) c -> (b h w) (h1 w1) c", h1=window_size, w1=window_size
-        )
+        return rearrange(x,
+                         "b (h h1) (w w1) c -> (b h w) (h1 w1) c",
+                         h1=window_size,
+                         w1=window_size)
 
     def window_reverse(self, x: jnp.ndarray, window_size: int, h: int, w: int):
         return rearrange(

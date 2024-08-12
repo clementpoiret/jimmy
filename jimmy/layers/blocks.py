@@ -7,7 +7,8 @@ from jimmy.utils import get_defaults, window_partition, window_reverse
 
 from .attention import WindowedAttention
 from .builders import get_act, get_module, get_norm
-from .configs import AttentionConfig, ConvBlockConfig, MambaConfig, ViTBlockConfig
+from .configs import (AttentionConfig, ConvBlockConfig, MambaConfig,
+                      ViTBlockConfig)
 from .dropout import DropPath
 from .misc import Identity
 from .norm import LayerScale
@@ -64,21 +65,14 @@ class ViTBlock(nnx.Module):
         self.use_windowed_attention = not is_mamba and config.msa_window_size != -1
 
         attention = get_module(config.attention)
-        attn_cfg = (
-            MambaConfig(d_model=dim, **self.mamba_config)
-            if is_mamba
-            else AttentionConfig(dim, **self.attention_config)
-        )
+        attn_cfg = (MambaConfig(d_model=dim, **self.mamba_config) if is_mamba
+                    else AttentionConfig(dim, **self.attention_config))
         self.attn = attention(config=attn_cfg, rngs=rngs)
 
-        self.ls1 = (
-            LayerScale(dim, init_values=config.init_values, rngs=rngs)
-            if config.init_values
-            else Identity()
-        )
-        self.drop_path1 = (
-            DropPath(config.dr1, rngs=rngs) if config.dr1 > 0.0 else Identity()
-        )
+        self.ls1 = (LayerScale(dim, init_values=config.init_values, rngs=rngs)
+                    if config.init_values else Identity())
+        self.drop_path1 = (DropPath(config.dr1, rngs=rngs)
+                           if config.dr1 > 0.0 else Identity())
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
         self.mlp = get_module(config.ffn_layer)(
@@ -89,14 +83,10 @@ class ViTBlock(nnx.Module):
             bias=config.ffn_bias,
             rngs=rngs,
         )
-        self.ls2 = (
-            LayerScale(dim, init_values=config.init_values, rngs=rngs)
-            if config.init_values
-            else Identity()
-        )
-        self.drop_path2 = (
-            DropPath(config.dr2, rngs=rngs) if config.dr2 > 0.0 else Identity()
-        )
+        self.ls2 = (LayerScale(dim, init_values=config.init_values, rngs=rngs)
+                    if config.init_values else Identity())
+        self.drop_path2 = (DropPath(config.dr2, rngs=rngs)
+                           if config.dr2 > 0.0 else Identity())
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
@@ -183,16 +173,10 @@ class ConvBlock(nnx.Module):
             rngs=rngs,
         )
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
-        self.ls1 = (
-            LayerScale(dim, init_values=config.init_values, rngs=rngs)
-            if config.init_values
-            else Identity()
-        )
-        self.drop_path1 = (
-            DropPath(float(config.drop_path), rngs=rngs)
-            if config.drop_path > 0.0
-            else Identity()
-        )
+        self.ls1 = (LayerScale(dim, init_values=config.init_values, rngs=rngs)
+                    if config.init_values else Identity())
+        self.drop_path1 = (DropPath(float(config.drop_path), rngs=rngs)
+                           if config.drop_path > 0.0 else Identity())
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the ConvBlock to the input.
@@ -287,16 +271,12 @@ class MllaBlock(nnx.Module):
         is_mamba = "mamba" in config.attention
 
         attention = get_module(config.attention)
-        attn_cfg = (
-            MambaConfig(d_model=dim, **self.mamba_config)
-            if is_mamba
-            else AttentionConfig(dim, **self.attention_config)
-        )
+        attn_cfg = (MambaConfig(d_model=dim, **self.mamba_config) if is_mamba
+                    else AttentionConfig(dim, **self.attention_config))
         self.attn = attention(config=attn_cfg, rngs=rngs)
 
-        self.drop_path1 = (
-            DropPath(config.dr1, rngs=rngs) if config.dr1 > 0.0 else Identity()
-        )
+        self.drop_path1 = (DropPath(config.dr1, rngs=rngs)
+                           if config.dr1 > 0.0 else Identity())
 
         self.cpe2 = nnx.Conv(
             in_features=dim,
@@ -319,9 +299,8 @@ class MllaBlock(nnx.Module):
             rngs=rngs,
         )
 
-        self.drop_path2 = (
-            DropPath(config.dr2, rngs=rngs) if config.dr2 > 0.0 else Identity()
-        )
+        self.drop_path2 = (DropPath(config.dr2, rngs=rngs)
+                           if config.dr2 > 0.0 else Identity())
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
@@ -412,9 +391,10 @@ class HATBlock(nnx.Module):
         self.attention_config.update(**attention_kwargs)
 
         # positional encoding for windowed attention tokens
-        self.pos_embed = PosEmbMLPSwinv1D(
-            dim, rank=2, seq_len=self.window_size**2, rngs=rngs
-        )
+        self.pos_embed = PosEmbMLPSwinv1D(dim,
+                                          rank=2,
+                                          seq_len=self.window_size**2,
+                                          rngs=rngs)
 
         norm_layer = get_norm(config.norm_layer)
         self.norm1 = norm_layer(num_features=dim, rngs=rngs)
@@ -430,14 +410,10 @@ class HATBlock(nnx.Module):
             rngs=rngs,
         )
 
-        self.ls1 = (
-            LayerScale(dim, init_values=config.init_values, rngs=rngs)
-            if config.init_values
-            else Identity()
-        )
-        self.drop_path1 = (
-            DropPath(config.dr1, rngs=rngs) if config.dr1 > 0.0 else Identity()
-        )
+        self.ls1 = (LayerScale(dim, init_values=config.init_values, rngs=rngs)
+                    if config.init_values else Identity())
+        self.drop_path1 = (DropPath(config.dr1, rngs=rngs)
+                           if config.dr1 > 0.0 else Identity())
 
         self.norm2 = norm_layer(num_features=dim, rngs=rngs)
         self.mlp = get_module(config.ffn_layer)(
@@ -448,14 +424,10 @@ class HATBlock(nnx.Module):
             bias=config.ffn_bias,
             rngs=rngs,
         )
-        self.ls2 = (
-            LayerScale(dim, init_values=config.init_values, rngs=rngs)
-            if config.init_values
-            else Identity()
-        )
-        self.drop_path2 = (
-            DropPath(config.dr2, rngs=rngs) if config.dr2 > 0.0 else Identity()
-        )
+        self.ls2 = (LayerScale(dim, init_values=config.init_values, rngs=rngs)
+                    if config.init_values else Identity())
+        self.drop_path2 = (DropPath(config.dr2, rngs=rngs)
+                           if config.dr2 > 0.0 else Identity())
 
         if self.sr_ratio > 1:
             # If hierarchical attention, this part is for carrier tokens
@@ -476,47 +448,40 @@ class HATBlock(nnx.Module):
                 bias=config.ffn_bias,
                 rngs=rngs,
             )
-            self.hat_drop_path = (
-                DropPath(config.dr2, rngs=rngs) if config.dr2 > 0.0 else Identity()
-            )
-            self.hat_pos_embed = PosEmbMLPSwinv1D(
-                dim, rank=2, seq_len=cr_tokens_total, rngs=rngs
-            )
-            self.hat_ls1 = (
-                LayerScale(dim, init_values=config.init_values, rngs=rngs)
-                if config.init_values
-                else Identity()
-            )
-            self.hat_ls2 = (
-                LayerScale(dim, init_values=config.init_values, rngs=rngs)
-                if config.init_values
-                else Identity()
-            )
-            self.hat_ls3 = (
-                LayerScale(dim, init_values=config.init_values, rngs=rngs)
-                if config.init_values
-                else Identity()
-            )
+            self.hat_drop_path = (DropPath(config.dr2, rngs=rngs)
+                                  if config.dr2 > 0.0 else Identity())
+            self.hat_pos_embed = PosEmbMLPSwinv1D(dim,
+                                                  rank=2,
+                                                  seq_len=cr_tokens_total,
+                                                  rngs=rngs)
+            self.hat_ls1 = (LayerScale(
+                dim, init_values=config.init_values, rngs=rngs)
+                            if config.init_values else Identity())
+            self.hat_ls2 = (LayerScale(
+                dim, init_values=config.init_values, rngs=rngs)
+                            if config.init_values else Identity())
+            self.hat_ls3 = (LayerScale(
+                dim, init_values=config.init_values, rngs=rngs)
+                            if config.init_values else Identity())
 
     def ct_window(self, ct, W, H, window_size):
         bs, _, N = ct.shape
-        ct = ct.reshape(
-            bs, H // window_size, window_size, W // window_size, window_size, N
-        )
+        ct = ct.reshape(bs, H // window_size, window_size, W // window_size,
+                        window_size, N)
         ct = jnp.transpose(ct, (0, 1, 3, 2, 4, 5))
         return ct
 
     def ct_dewindow(self, ct, W, H, window_size):
         bs, _, N = ct.shape
-        ct2 = ct.reshape(
-            -1, W // window_size, H // window_size, window_size, window_size, N
-        )
+        ct2 = ct.reshape(-1, W // window_size, H // window_size, window_size,
+                         window_size, N)
         ct2 = jnp.transpose(ct2, (0, 5, 1, 3, 2, 4))
         ct2 = ct2.reshape(bs, N, W * H)
         ct2 = jnp.transpose(ct2, (0, 2, 1))
         return ct2
 
-    def __call__(self, x: jnp.ndarray, carrier_tokens: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, x: jnp.ndarray,
+                 carrier_tokens: jnp.ndarray) -> jnp.ndarray:
         """Apply the block to the input.
 
         Args:
@@ -547,9 +512,9 @@ class HATBlock(nnx.Module):
 
             # attention plus mlp
             ct = ct + self.hat_drop_path(
-                self.hat_ls1(self.hat_attn(self.hat_norm1(ct)))
-            )
-            ct = ct + self.hat_drop_path(self.hat_ls2(self.hat_mlp(self.hat_norm2(ct))))
+                self.hat_ls1(self.hat_attn(self.hat_norm1(ct))))
+            ct = ct + self.hat_drop_path(
+                self.hat_ls2(self.hat_mlp(self.hat_norm2(ct))))
 
             # ct are put back to windows
             ct = self.ct_window(
@@ -576,14 +541,14 @@ class HATBlock(nnx.Module):
             if self.last and self.do_propagation:
                 # propagate carrier token information into the image
                 ctr_image_space = jnp.transpose(ctr, (0, 2, 1)).reshape(
-                    b, n, self.ct_size, self.ct_size
-                )
+                    b, n, self.ct_size, self.ct_size)
                 upsampled = jax.image.resize(
                     ctr_image_space,
                     (b, n, self.window_size, self.window_size),
                     method="nearest",
                 )
-                upsampled = jnp.transpose(upsampled.reshape(b, n, -1), (0, 2, 1))
+                upsampled = jnp.transpose(upsampled.reshape(b, n, -1),
+                                          (0, 2, 1))
 
                 x = x + self.hat_ls3(upsampled)
 

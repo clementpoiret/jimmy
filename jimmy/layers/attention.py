@@ -43,17 +43,21 @@ class Attention(nnx.Module):
             case _:
                 raise ValueError(f"Unknown norm `{config.norm_layer}`")
 
-        self.qkv = nnx.Linear(
-            config.dim, config.dim * 3, use_bias=config.qkv_bias, rngs=rngs
-        )
+        self.qkv = nnx.Linear(config.dim,
+                              config.dim * 3,
+                              use_bias=config.qkv_bias,
+                              rngs=rngs)
         self.attn_drop = nnx.Dropout(config.attn_drop, rngs=rngs)
-        self.proj = nnx.Linear(
-            config.dim, config.dim, use_bias=config.proj_bias, rngs=rngs
-        )
+        self.proj = nnx.Linear(config.dim,
+                               config.dim,
+                               use_bias=config.proj_bias,
+                               rngs=rngs)
         self.proj_drop = nnx.Dropout(config.proj_drop, rngs=rngs)
 
-        self.q_norm = norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
-        self.k_norm = norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
+        self.q_norm = norm_layer(config.head_dim,
+                                 rngs=rngs) if config.qk_norm else None
+        self.k_norm = norm_layer(config.head_dim,
+                                 rngs=rngs) if config.qk_norm else None
 
     def __call__(self, x: jnp.ndarray):
         """
@@ -77,8 +81,7 @@ class Attention(nnx.Module):
 
         qkv = self.qkv(x)
         qkv = jnp.reshape(
-            qkv, (B, N, 3, self.config.num_heads, C // self.config.num_heads)
-        )
+            qkv, (B, N, 3, self.config.num_heads, C // self.config.num_heads))
         qkv = jnp.transpose(qkv, (2, 0, 3, 1, 4))
 
         q, k, v = tuple(qkv)
@@ -124,7 +127,10 @@ class LinearAttention(nnx.Module):
         w = int(n**0.5)
         num_heads = self.config.num_heads
 
-        q, k = rearrange(self.qk(x), "b n (qk h d) -> qk b h n d", qk=2, h=num_heads)
+        q, k = rearrange(self.qk(x),
+                         "b n (qk h d) -> qk b h n d",
+                         qk=2,
+                         h=num_heads)
         v = rearrange(x, "b n (h d) -> b h n d", h=num_heads)
 
         q = nnx.elu(q) + 1.0
@@ -135,13 +141,16 @@ class LinearAttention(nnx.Module):
         q_2d = rearrange(q, "b h (x y) d -> b x y (h d)", x=h, y=w)
         k_2d = rearrange(k, "b h (x y) d -> b x y (h d)", x=h, y=w)
 
-        q_rope = rearrange(rope(q_2d), "b x y (h d) -> b h (x y) d", h=num_heads)
-        k_rope = rearrange(rope(k_2d), "b x y (h d) -> b h (x y) d", h=num_heads)
+        q_rope = rearrange(rope(q_2d),
+                           "b x y (h d) -> b h (x y) d",
+                           h=num_heads)
+        k_rope = rearrange(rope(k_2d),
+                           "b x y (h d) -> b h (x y) d",
+                           h=num_heads)
 
         # Compute attention
-        z = 1 / (
-            jnp.einsum("bhnd,bhd->bhn", q, reduce(k, "b h n d -> b h d", "mean")) + 1e-6
-        )
+        z = 1 / (jnp.einsum("bhnd,bhd->bhn", q,
+                            reduce(k, "b h n d -> b h d", "mean")) + 1e-6)
         kv = jnp.einsum("bhnd,bhne->bhde", k_rope * (n**-0.5), v * (n**-0.5))
         x = jnp.einsum("bhnd,bhde->bhne", q_rope, kv) * z[..., None]
 
@@ -152,7 +161,9 @@ class LinearAttention(nnx.Module):
         v_2d = rearrange(v, "b h (x y) d -> b x y (h d)", x=h, y=w)
         lepe_out = self.lepe(v_2d)
 
-        lepe_out = rearrange(lepe_out, "b x y (h d) -> b (x y) (h d)", h=num_heads)
+        lepe_out = rearrange(lepe_out,
+                             "b x y (h d) -> b (x y) (h d)",
+                             h=num_heads)
 
         # Combine attention output and LePE
         x = x + lepe_out
@@ -199,13 +210,15 @@ class WindowedAttention(nnx.Module):
             case _:
                 raise ValueError(f"Unknown norm `{config.norm_layer}`")
 
-        self.qkv = nnx.Linear(
-            config.dim, config.dim * 3, use_bias=config.qkv_bias, rngs=rngs
-        )
+        self.qkv = nnx.Linear(config.dim,
+                              config.dim * 3,
+                              use_bias=config.qkv_bias,
+                              rngs=rngs)
         self.attn_drop = nnx.Dropout(config.attn_drop, rngs=rngs)
-        self.proj = nnx.Linear(
-            config.dim, config.dim, use_bias=config.proj_bias, rngs=rngs
-        )
+        self.proj = nnx.Linear(config.dim,
+                               config.dim,
+                               use_bias=config.proj_bias,
+                               rngs=rngs)
         self.proj_drop = nnx.Dropout(config.proj_drop, rngs=rngs)
 
         # Attention positional bias
@@ -217,8 +230,10 @@ class WindowedAttention(nnx.Module):
             rngs=rngs,
         )
 
-        self.q_norm = norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
-        self.k_norm = norm_layer(config.head_dim, rngs=rngs) if config.qk_norm else None
+        self.q_norm = norm_layer(config.head_dim,
+                                 rngs=rngs) if config.qk_norm else None
+        self.k_norm = norm_layer(config.head_dim,
+                                 rngs=rngs) if config.qk_norm else None
 
     def __call__(self, x: jnp.ndarray):
         """
@@ -242,8 +257,7 @@ class WindowedAttention(nnx.Module):
 
         qkv = self.qkv(x)
         qkv = jnp.reshape(
-            qkv, (B, N, 3, self.config.num_heads, C // self.config.num_heads)
-        )
+            qkv, (B, N, 3, self.config.num_heads, C // self.config.num_heads))
         qkv = jnp.transpose(qkv, (2, 0, 3, 1, 4))
 
         q, k, v = tuple(qkv)
