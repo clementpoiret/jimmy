@@ -4,20 +4,17 @@ import jax.numpy as jnp
 from einops import reduce
 from flax import nnx
 
-from jimmy.layers import (ConvBlock, ConvPatchEmbed, GenericLayer, Identity,
-                          ViTBlock)
+from jimmy.layers.blocks import ConvBlock, HATBlock
 from jimmy.layers.builders import get_norm
 from jimmy.layers.configs import ConvBlockConfig, ViTBlockConfig
+from jimmy.layers.fastervit import FasterViTLayer
+from jimmy.layers.misc import Identity
+from jimmy.layers.patch import ConvPatchEmbed
 
-from .mlla import Mlla
 
-
-class MambaVision(nnx.Module):
+class FasterViT(nnx.Module):
     """
-    MambaVision model architecture.
-
-    This class implements the MambaVision model, which combines elements of
-    vision transformers and convolutional neural networks.
+    FasterViT model architecture.
 
     Args:
         in_features (int): Number of input channels.
@@ -44,9 +41,6 @@ class MambaVision(nnx.Module):
         num_classes (int, optional): Number of classes for classification. Defaults to 1000.
     """
 
-    msa_blocktype = "attention"
-    mamba_blocktype = "mambavisionmixer"
-
     block_config = {
         "mlp_ratio": 4.0,
         "ffn_layer": "mlp",
@@ -62,13 +56,10 @@ class MambaVision(nnx.Module):
         "attn_drop": 0.0,
         "norm_layer": "layernorm",
     }
-    mamba_config = {
-        "d_state": 8,
-        "d_conv": 3,
-        "expand": 1,
-    }
 
-    norm_layer = "batchnorm"  # check w/ layernorm?
+    norm_layer = "batchnorm"
+    hat: List[bool] = [False, False, True, False]
+    do_propagation: bool = False
 
     drop_path_rate: float = 0.2
     num_classes: int = 1000
@@ -80,10 +71,11 @@ class MambaVision(nnx.Module):
         in_features: int,
         dim: int,
         in_dim: int,
+        resolution: int,
         depths: List[int],
-        layer_window_sizes: List[int],
-        msa_window_sizes: List[int],
         num_heads: List[int],
+        window_sizes: List[int],
+        ct_size: int,
         *,
         rngs: nnx.Rngs,
         block_kwargs: dict = {},
@@ -93,7 +85,6 @@ class MambaVision(nnx.Module):
     ):
         self.__dict__.update(**kwargs)
         self.attention_config.update(**attention_kwargs)
-        self.mamba_config.update(**mamba_kwargs)
         self.block_config.update(**block_kwargs)
 
         num_features = int(dim * 2**(len(depths) - 1))
@@ -105,6 +96,11 @@ class MambaVision(nnx.Module):
                                           rngs=rngs)
         dpr = list(jnp.linspace(0, self.drop_path_rate, sum(depths)))
 
+        if self.hat is None:
+            self.hat = [
+                True,
+            ] * len(depths)
+
         self.levels = []
         for i, item in enumerate(depths):
             conv = i < 2
@@ -112,15 +108,16 @@ class MambaVision(nnx.Module):
                 "init_values": None
             } if not self.ls_convblock and conv else {}
 
-            level = GenericLayer(
+            level = FasterViTLayer(
                 dim=int(dim * 2**i),
                 depth=item,
-                block=ConvBlock if conv else ViTBlock,
+                input_resolution=int(2**(-2 - i) * resolution),
+                window_size=window_sizes[i],
+                ct_size=ct_size,
+                block=ConvBlock if conv else HATBlock,
                 block_config=ConvBlockConfig if conv else ViTBlockConfig,
-                layer_window_size=layer_window_sizes[i],
-                msa_window_size=msa_window_sizes[i],
                 drop_path=dpr[sum(depths[:i]):sum(depths[:i + 1])],
-                block_types=[None] if conv else self._get_block_types(item),
+                block_types=[None],
                 downsample=i < len(depths) - 1,
                 config_kwargs={
                     **(self.block_config | _config),
@@ -130,9 +127,7 @@ class MambaVision(nnx.Module):
                         "num_heads": num_heads[i],
                         **self.attention_config,
                     },
-                    "mamba_kwargs": {
-                        **self.mamba_config,
-                    },
+                    "do_propagation": self.do_propagation,
                 },
                 rngs=rngs,
             )
@@ -142,23 +137,6 @@ class MambaVision(nnx.Module):
                                               rngs=rngs)
         self.head = (nnx.Linear(num_features, self.num_classes, rngs=rngs)
                      if self.num_classes else Identity())
-
-    def _get_block_types(self, l: int):
-        """
-        Generate a list of block types for a layer.
-        Used to alternate between Multi-Head Self Attention (MSA), and Mamba blocks
-
-        Args:
-            l (int): Total number of blocks in the layer.
-
-        Returns:
-            List[str]: A list of block types, with the first half being "mambavisionmixer"
-                       and the second half being "attention".
-        """
-        first_half_size = (l + 1) // 2
-        second_half_size = l // 2
-        return [self.mamba_blocktype] * first_half_size + [self.msa_blocktype
-                                                           ] * second_half_size
 
     def forward_features(self, x: jnp.ndarray):
         """
@@ -175,13 +153,12 @@ class MambaVision(nnx.Module):
             x = level(x)
         x = self.norm(x)
         x = reduce(x, "b h w c -> b c", "mean")
-        x = jnp.reshape(x, (x.shape[0], -1))
 
         return x
 
     def __call__(self, x: jnp.ndarray):
         """
-        Forward pass of the MambaVision model.
+        Forward pass of the FasterViT model.
 
         Args:
             x (jnp.ndarray): Input tensor of shape (batch_size, height, width, channels).
@@ -193,20 +170,3 @@ class MambaVision(nnx.Module):
         x = self.head(x)
 
         return x
-
-
-class VMamba2(Mlla):
-    block_types: list = [
-        "mamba2mixer",
-        "mamba2mixer",
-        "mamba2mixer",
-        "attention",
-    ]
-    block_config = {
-        "mlp_ratio": 4.0,
-        "ffn_layer": "mlp",
-        "ffn_bias": True,
-        "act_layer": "gelu",  # silu in Mlla
-        "init_values": None,
-        "use_dwc": False,  # true in Mlla
-    }
