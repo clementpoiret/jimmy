@@ -62,7 +62,7 @@ class GenericLayer(nnx.Module):
     ):
         self.__dict__.update(**kwargs)
 
-        self.reshape = not isinstance(block, ConvBlock)
+        self.reshape = block is not ConvBlock
 
         self.blocks = []
         for i in range(depth):

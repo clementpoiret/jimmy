@@ -18,5 +18,5 @@ from .patch import (
     SimpleConvStem,
     SimplePatchMerging,
 )
-from .rope import RoPE
+from .posemb import RoPE
 from .swiglu import SwiGLU
