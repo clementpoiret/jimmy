@@ -79,19 +79,14 @@ class LayerSharing(nnx.Module):
     ):
         self.__dict__.update(**kwargs)
 
-        self.loras = (
-            [
-                LoRA(
-                    in_features=dim,
-                    out_features=dim,
-                    rngs=rngs,
-                    **self.lora_kwargs,
-                )
-                for i in range(self.repetitions)
-            ]
-            if self.lora
-            else None
-        )
+        self.loras = ([
+            LoRA(
+                in_features=dim,
+                out_features=dim,
+                rngs=rngs,
+                **self.lora_kwargs,
+            ) for i in range(self.repetitions)
+        ] if self.lora else None)
 
         self.f = f
 
@@ -103,8 +98,8 @@ class LayerSharing(nnx.Module):
             return self.loras[j](x)
 
         lora_output = switch(
-            i, [lambda x: apply_lora(j, x) for j in range(self.repetitions)], x
-        )
+            i, [lambda x: apply_lora(j, x) for j in range(self.repetitions)],
+            x)
         return self.f(x) + lora_output
 
     def __call__(self, x: jnp.ndarray):
