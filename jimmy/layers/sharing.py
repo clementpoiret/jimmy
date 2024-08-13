@@ -49,7 +49,7 @@ class LoRA(nnx.Module):
 class LayerSharing(nnx.Module):
     """
     Layer Sharing wrapper responsible for repeating a Callable,
-    while learning LoRA params. This is similar to what is done in MobileLLL [1]
+    while learning LoRA params. This is similar to what is done in MobileLLM [1]
     and Zamba2 [2]. It allows to use more FLOPs without having to store more params.
 
     Depending on the position of this wrapper (block-level or layer-level), given three
