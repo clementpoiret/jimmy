@@ -213,3 +213,5 @@ pyrightconfig.json
 scripts/
 _tests/
 .aider*
+.devenv
+.direnv
