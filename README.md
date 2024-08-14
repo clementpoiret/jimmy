@@ -20,22 +20,27 @@ in the field of deep learning.
 ### Install using PyPI
 
 ```sh
+# cpu
 pip install jimmy-vision
+
+# cuda12
+pip install jimmy-vision[cuda12]
 ```
 
 ### Cloning the repo
 
-You can either use pixi or poetry:
+You can either use [poetry](https://python-poetry.org/),
+[nix](https://nixos.org/download/), or [devenv](devenv.sh):
 
 ```sh
 git clone git@github.com:clementpoiret/jimmy.git
 cd jimmy
 
 # either
-pixi install
+nix develop --impure
 
 # or
-poetry install
+poetry install -E cuda12
 ```
 
 ## Quick Start
