@@ -1,36 +1,28 @@
-[tool.poetry]
-name = "jimmy-vision"
+[project]
+name = "jimmy"
 version = "0.0.6"
 description = "Implementations of popular vision models in Jax (Flax NNX)"
-authors = ["clementpoiret <poiret.clement@outlook.fr>"]
 license = "MIT"
 readme = "README.md"
-packages = [
-    { include = "jimmy" }
+requires-python = ">=3.11"
+dependencies = [
+  "einops>=0.8.0",
+  "flax>=0.8.5",
+  "jax>=0.4.25",
+  "py7zr>=0.21.1",
+  "urllib3>=2.2.2"
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.11"
-jax = ">=0.4.25"
-flax = ">=0.8.5"
-py7zr = ">=0.21.1"
-urllib3 = ">=2.2.2"
-einops = ">=0.8.0"
-
-# For GPU usage
-jaxlib = { version = ">=0.4.25", optional = true }
-jax-cuda12-plugin = { extras = ["with_cuda"], version = ">=0.4.25", optional = true }
-
-# Needed if one wants to convert weights from pytorch
-torch = { version = "^2.3.1", optional = true }
-torchvision = { version = "^0.18.1", optional = true }
-
-[tool.poetry.extras]
-torch = ["torch", "torchvision"]
-cuda12 = ["jaxlib", "jax-cuda12-plugin"]
-
-[tool.poetry.group.dev.dependencies]
+[project.optional-dependencies]
+cuda12 = [
+  "jaxlib>=0.4.25",
+  "jax-cuda12-plugin[with_cuda]>=0.4.25"
+]
+torch = [
+  "torch",
+  "torchvision"
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
