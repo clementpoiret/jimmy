@@ -311,7 +311,7 @@ wheels = [
 ]
 
 [[package]]
-name = "jimmy"
+name = "jimmy-vision"
 version = "0.0.6"
 source = { editable = "." }
 dependencies = [
