@@ -1,6 +1,6 @@
 [project]
 name = "jimmy-vision"
-version = "0.0.6"
+version = "0.0.7"
 description = "Implementations of popular vision models in Jax (Flax NNX)"
 license = "MIT"
 readme = "README.md"
@@ -8,19 +8,19 @@ requires-python = ">=3.11"
 dependencies = [
   "einops>=0.8.0",
   "flax>=0.8.5",
-  "jax>=0.4.25",
+  "jax>=0.4.27",
   "py7zr>=0.21.1",
-  "urllib3>=2.2.2"
+  "urllib3>=2.0.0"
 ]
 
 [project.optional-dependencies]
 cuda12 = [
-  "jaxlib>=0.4.25",
-  "jax-cuda12-plugin[with_cuda]>=0.4.25"
+  "jaxlib>=0.4.27",
+  "jax-cuda12-plugin[with_cuda]>=0.4.27"
 ]
 torch = [
-  "torch",
-  "torchvision"
+  "torch==2.4.0", # cuda12 version
+  "torchvision==0.19.0"
 ]
 
 [build-system]
