@@ -1,6 +1,6 @@
 [project]
 name = "jimmy-vision"
-version = "0.0.6"
+version = "0.0.7"
 description = "Implementations of popular vision models in Jax (Flax NNX)"
 license = "MIT"
 readme = "README.md"
