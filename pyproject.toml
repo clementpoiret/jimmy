@@ -19,7 +19,7 @@ cuda12 = [
   "jax-cuda12-plugin[with_cuda]>=0.4.27"
 ]
 torch = [
-  "torch==2.4.0", # cuda12 version
+  "torch==2.6.0", # cuda12 version
   "torchvision==0.19.0"
 ]
 
